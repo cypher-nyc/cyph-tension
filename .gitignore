@@ -1,0 +1,5 @@
+haskell/build/
+__pycache__/
+*.pyc
+.DS_Store
+*_stub.h

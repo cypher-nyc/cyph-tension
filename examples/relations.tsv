@@ -1,0 +1,14 @@
+# Lines between works, on the dissonance axis: contests, complicates, refutes.
+# source work <tab> axis <tab> target work <tab> strength [<tab> who says so [<tab> where]]
+# The same line may appear more than once, assessed by different people.
+#
+# These are well-known disputes, here so the examples have something to stand
+# on. The strengths are illustrative, not measured: how strongly one work
+# stands against another is exactly the kind of judgement this file is for.
+Anarchy, State, and Utopia	contests	A Theory of Justice	1.0
+Liberalism and the Limits of Justice	contests	A Theory of Justice	0.8
+Justice, Gender, and the Family	complicates	A Theory of Justice	0.6
+After Virtue	complicates	A Theory of Justice	0.5
+After Virtue	complicates	Anarchy, State, and Utopia	0.5
+The Structure of Scientific Revolutions	contests	The Logic of Scientific Discovery	0.8
+Against Method	contests	The Logic of Scientific Discovery	0.9

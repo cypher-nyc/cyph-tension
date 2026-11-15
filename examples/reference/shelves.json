@@ -1,0 +1,66 @@
+{
+ "bread": [
+  "Sourdough starters: feeding schedules, hydration and how temperature changes fermentation",
+  "Shaping a country loaf: pre-shape, bench rest, final tension and the banneton",
+  "Baking in a dutch oven: steam, oven spring, scoring patterns and crust colour",
+  "Whole grain flours: bran, protein content, autolyse and longer bulk fermentation",
+  "Enriched doughs: butter, eggs and sugar in brioche and challah",
+  "Rye bread: pentosans, sour builds and dense northern European loaves"
+ ],
+ "astronomy": [
+  "Stellar evolution: main sequence, red giants, white dwarfs and supernovae",
+  "The cosmic microwave background and what it says about the early universe",
+  "Exoplanet detection: transit photometry and radial velocity measurements",
+  "Galaxy morphology: spirals, ellipticals and the role of dark matter halos",
+  "Observing with a small telescope: aperture, focal ratio, mounts and seeing",
+  "Black holes: event horizons, accretion disks and gravitational waves"
+ ],
+ "contract law": [
+  "Offer and acceptance: when a binding agreement is formed",
+  "Consideration and promissory estoppel in the enforcement of promises",
+  "Breach and remedies: expectation damages, reliance and specific performance",
+  "Misrepresentation, mistake and duress as grounds to set a contract aside",
+  "Implied terms, good faith and the interpretation of written agreements",
+  "Privity of contract and the rights of third parties"
+ ],
+ "music theory": [
+  "Functional harmony: tonic, subdominant and dominant in major and minor keys",
+  "Voice leading and counterpoint: parallel fifths, contrary motion, species exercises",
+  "Rhythm and metre: syncopation, polyrhythm and compound time signatures",
+  "Modes and scales: dorian, lydian, pentatonic and the blues scale",
+  "Sonata form: exposition, development and recapitulation",
+  "Jazz harmony: seventh chords, tritone substitution and the ii-V-I progression"
+ ],
+ "marine biology": [
+  "Coral reef ecosystems: symbiotic algae, bleaching and reef builders",
+  "Deep sea life: hydrothermal vents, chemosynthesis and bioluminescence",
+  "Cetacean communication: whale song, echolocation and pod structure",
+  "Plankton and the ocean food web: diatoms, krill and the biological pump",
+  "Kelp forests, sea otters and trophic cascades on temperate coasts",
+  "Fish physiology: gills, swim bladders and osmoregulation in salt water"
+ ],
+ "chess": [
+  "Opening principles: control of the centre, development and king safety",
+  "The Sicilian Defence: the Najdorf and Dragon variations and their plans",
+  "Endgame technique: king and pawn endings, opposition and the square of the pawn",
+  "Tactical motifs: pins, forks, skewers, discovered attacks and deflection",
+  "Positional play: weak squares, pawn structure and good and bad bishops",
+  "Rook endgames: the Lucena and Philidor positions"
+ ],
+ "medieval history": [
+  "The Carolingian empire: Charlemagne, the missi dominici and the Treaty of Verdun",
+  "Feudal obligations: vassalage, fiefs, homage and manorial labour",
+  "The Black Death: mortality, labour shortages and social upheaval in the fourteenth century",
+  "Monastic life: the Benedictine rule, scriptoria and the copying of manuscripts",
+  "The Crusades: Outremer, the military orders and the fall of Acre",
+  "Medieval towns: guilds, charters, fairs and the growth of trade"
+ ],
+ "knitting": [
+  "Casting on and binding off: long tail, cable and stretchy bind-offs",
+  "Reading a knitting pattern: gauge swatches, abbreviations and charts",
+  "Stranded colourwork: floats, tension and Fair Isle motifs",
+  "Shaping a sweater: raglan sleeves, short rows and picking up stitches",
+  "Yarn fibres: merino, alpaca, cotton and how ply changes drape",
+  "Lace knitting: yarn overs, decreases and blocking with wires"
+ ]
+}

@@ -1,0 +1,39 @@
+{
+ "title": "property and liberty",
+ "slug": "property-and-liberty",
+ "contents": [
+  {
+   "class": "Text",
+   "title": "Anarchy, State, and Utopia",
+   "content": "Robert Nozick, 1974. Individuals have rights, and only a minimal state limited to protection against force, theft and fraud is justified. The entitlement theory of justice: a holding is just if it was acquired and transferred justly, whatever pattern of distribution results. The Wilt Chamberlain argument against patterned principles such as the difference principle."
+  },
+  {
+   "class": "Link",
+   "title": "Second Treatise of Government",
+   "description": "John Locke, 1689. Natural rights to life, liberty and property; property begins when a person mixes their labour with the world. Government by consent, limited to protecting those rights.",
+   "source": {
+    "url": "https://www.gutenberg.org/ebooks/7370"
+   }
+  },
+  {
+   "class": "Text",
+   "title": "The Constitution of Liberty",
+   "content": "Friedrich Hayek, 1960. Liberty as the absence of coercion under general rules of law. The knowledge needed to plan a society is dispersed among individuals, so the state should protect a framework and not aim at a distribution."
+  },
+  {
+   "class": "Text",
+   "title": "The Road to Serfdom",
+   "content": "Friedrich Hayek, 1944. Central economic planning concentrates power and erodes individual liberty and the rule of law."
+  },
+  {
+   "class": "Text",
+   "title": "A Theory of Justice",
+   "content": "John Rawls, 1971. Read to know the case being answered: the original position, the veil of ignorance, the difference principle and justice as fairness."
+  },
+  {
+   "class": "Text",
+   "title": "The Machinery of Freedom",
+   "content": "David Friedman, 1973. A consequentialist case for private property and markets in place of the state, including law and protection."
+  }
+ ]
+}

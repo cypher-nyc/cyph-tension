@@ -1,0 +1,27 @@
+[
+ {
+  "title": "Two Treatises of Government",
+  "description": "John Locke, 1689. Against absolute monarchy; government rests on the consent of the governed and exists to protect natural rights.",
+  "url": "https://en.wikipedia.org/wiki/Two_Treatises_of_Government"
+ },
+ {
+  "title": "Discourse on the Origin of Inequality",
+  "description": "Jean-Jacques Rousseau, 1755. The state of nature, the invention of property and the social origin of inequality among people."
+ },
+ {
+  "title": "The Social Contract",
+  "description": "Jean-Jacques Rousseau, 1762. The general will, the sovereign people, liberty as obedience to a law citizens give themselves."
+ },
+ {
+  "title": "Leviathan",
+  "description": "Thomas Hobbes, 1651. The state of nature as a war of all against all and the covenant that sets up a sovereign."
+ },
+ {
+  "title": "Perpetual Peace",
+  "description": "Immanuel Kant, 1795. Republican constitutions, a federation of free states and a cosmopolitan right as the conditions of lasting peace."
+ },
+ {
+  "title": "On Liberty",
+  "description": "John Stuart Mill, 1859. The harm principle: society may limit a person's liberty only to prevent harm to others. Liberty of thought and discussion."
+ }
+]

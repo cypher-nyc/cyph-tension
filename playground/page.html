@@ -1,0 +1,300 @@
+<!doctype html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tension</title>
+<style>
+  :root {
+    --void: #0e0e10;
+    --surface: #16161a;
+    --ink: #ffffff;
+    --ink-muted: #a6a6ad;
+    --ink-faint: #6f6f76;
+    --hairline: rgba(255, 255, 255, 0.12);
+    --hairline-strong: rgba(255, 255, 255, 0.22);
+    --paprika: #ec4e20;
+    --cornflower: #608fe6;
+    --amber: #fbaf00;
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px; --s12: 48px;
+    --text: 15px; --small: 13px; --display: 40px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--void); color: var(--ink); font: var(--text)/1.5 var(--font); }
+  main { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: var(--s12);
+         padding: var(--s8); max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); padding: var(--s4); gap: var(--s8); } }
+  h1 { font-size: var(--display); line-height: 1.05; font-weight: 700; margin: 0 0 var(--s2); }
+  h2 { font-size: var(--text); font-weight: 700; margin: var(--s8) 0 var(--s3); }
+  p { margin: 0 0 var(--s3); }
+  .muted { color: var(--ink-muted); } .faint { color: var(--ink-faint); } .small { font-size: var(--small); }
+  button, input, textarea { font: inherit; color: var(--ink); background: transparent;
+    border: 1px solid var(--hairline-strong); border-radius: 0; padding: var(--s2) var(--s3); }
+  button { cursor: pointer; } button:hover { border-color: var(--ink); }
+  input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+  :focus { outline: none; } :focus-visible { border-color: var(--ink); }
+  textarea { width: 100%; min-height: 120px; resize: vertical; font-size: var(--small); white-space: pre; }
+  input[type=text] { width: 100%; }
+  .row { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; margin-bottom: var(--s2); }
+  .row > input[type=text] { flex: 1 1 140px; width: auto; }
+  input[type=file] { display: none; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  .person { display: flex; justify-content: space-between; gap: var(--s3); align-items: baseline;
+            padding: var(--s3) 0; border-top: 1px solid var(--hairline); }
+  .person:last-child { border-bottom: 1px solid var(--hairline); }
+  .person button { border: 0; padding: 0; text-align: left; }
+  .person .who { font-weight: 700; }
+  .person[aria-current=true] .who { color: var(--amber); }
+  .drop { border: 1px dashed var(--hairline-strong); padding: var(--s4); margin-bottom: var(--s2); }
+  .drop.over { border-color: var(--ink); }
+  .swatch { display: inline-block; width: 10px; height: 10px; margin-right: var(--s2); }
+  .challenge { background: var(--paprika); } .ground { background: var(--cornflower); }
+  .below { background: var(--ink-faint); } .unknown { border: 1px solid var(--hairline-strong); }
+  .result { padding: var(--s4) 0; border-top: 1px solid var(--hairline); }
+  .result .head { display: flex; justify-content: space-between; gap: var(--s4); align-items: baseline; flex-wrap: wrap; }
+  .result .name { font-weight: 700; }
+  .numbers { display: flex; gap: var(--s6); font-variant-numeric: tabular-nums; }
+  .line { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--s3);
+          padding: var(--s1) 0; font-size: var(--small); }
+  .line .axis { color: var(--ink-muted); } .line .theirs { text-align: right; }
+  svg { display: block; width: 100%; height: auto; max-width: 560px; margin: var(--s4) 0 var(--s6); }
+  svg text { fill: var(--ink-muted); font: 12px var(--font); }
+  #error { color: var(--paprika); min-height: 1.5em; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>tension</h1>
+    <p class="muted">bring in what people have read. see who should sit together.</p>
+    <p id="status" class="faint small"></p>
+
+    <h2>people</h2>
+    <ul id="people"></ul>
+    <p id="empty" class="faint">no one here yet.</p>
+
+    <h2>add a person</h2>
+    <div class="row"><input id="name" type="text" placeholder="name" autocomplete="off"></div>
+    <div id="drop" class="drop small muted">drop files or a folder here: an obsidian vault, an are.na channel (.json), bookmarks (.html), a sheet (.csv), a list (.txt, .md)</div>
+    <div class="row">
+      <button id="pick-files">files</button><input id="files" type="file" multiple>
+      <button id="pick-folder">folder</button><input id="folder" type="file" webkitdirectory>
+    </div>
+    <div class="row">
+      <input id="channel" type="text" placeholder="are.na channel" autocomplete="off">
+      <button id="fetch">fetch</button>
+    </div>
+    <p id="error" class="small"></p>
+
+    <h2>lines between works</h2>
+    <p class="muted small">one per line: work, then contests / complicates / refutes, then work, then a strength. tabs or | between them.</p>
+    <textarea id="relations" spellcheck="false"></textarea>
+    <div class="row"><button id="save-relations">use these</button><span id="relation-count" class="faint small"></span></div>
+
+    <h2>room</h2>
+    <div class="row"><button id="examples">load the examples</button><button id="reset">clear</button></div>
+  </section>
+
+  <section>
+    <div class="row">
+      <input id="topic" type="text" placeholder="a topic (optional)" autocomplete="off">
+    </div>
+    <p id="for" class="muted"></p>
+    <svg id="field" viewBox="0 0 560 320" role="img" aria-label="shared ground against divergence"></svg>
+    <p class="small muted">
+      <span class="swatch challenge"></span>challenge &nbsp;
+      <span class="swatch ground"></span>ground only &nbsp;
+      <span class="swatch below"></span>below floor &nbsp;
+      <span class="swatch unknown"></span>unknown
+    </p>
+    <div id="ranked"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const READABLE = /\.(md|markdown|json|html?|csv|txt)$/i;
+const LENS = { "challenge": "challenge", "ground only": "ground", "below floor": "below", "unknown": "unknown" };
+let state = { people: [] };
+let me = null;
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v; else if (k === "on") for (const [e, f] of Object.entries(v)) node.addEventListener(e, f);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children) node.append(c);
+  return node;
+}
+
+async function api(path, body) {
+  const options = body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Playground": "1" }, body: JSON.stringify(body),
+  };
+  const response = await fetch(path, options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "that did not work");
+  return data;
+}
+
+async function act(work) {
+  $("error").textContent = "";
+  try { await work(); } catch (error) { $("error").textContent = error.message; }
+}
+
+function setState(next) {
+  state = next;
+  if (!state.people.some((p) => p.name === me)) me = state.people.length ? state.people[0].name : null;
+  $("status").textContent = `model: ${state.backend} · vectors: ${state.embedder}`;
+  $("empty").hidden = state.people.length > 0;
+  $("relation-count").textContent = state.relations ? `${state.relations} on record` : "";
+  if (document.activeElement !== $("relations")) $("relations").value = state.relations_text;
+  const list = $("people");
+  list.replaceChildren(...state.people.map((p) => {
+    const sources = Object.entries(p.sources).map(([s, n]) => `${n} ${s}`).join(" · ");
+    return el("li", { class: "person", "aria-current": String(p.name === me) },
+      el("button", { on: { click: () => { me = p.name; setState(state); } } },
+        el("div", { class: "who" }, p.name),
+        el("div", { class: "small muted" }, sources + (p.recorded ? ` · ${p.recorded} recorded` : ""))),
+      el("button", { class: "small faint", on: { click: () => act(async () => setState(await api("/api/remove", { name: p.name }))) } }, "remove"));
+  }));
+  rank();
+}
+
+async function rank() {
+  if (!me || state.people.length < 2) {
+    $("for").textContent = me ? "add one more person." : "";
+    $("ranked").replaceChildren(); drawField([], state.floor || 0);
+    return;
+  }
+  const query = new URLSearchParams({ me, topic: $("topic").value });
+  try { render(await api("/api/rank?" + query)); } catch (error) { $("error").textContent = error.message; }
+}
+
+const fmt = (v) => (v === null || v === undefined ? "–" : v.toFixed(2));
+
+function render(result) {
+  $("for").textContent = `for ${result.me}`;
+  drawField(result.ranked, result.floor);
+  $("ranked").replaceChildren(...result.ranked.map((row) => {
+    const node = el("div", { class: "result" },
+      el("div", { class: "head" },
+        el("div", {}, el("span", { class: "swatch " + LENS[row.lens] }), el("span", { class: "name" }, row.name),
+          el("span", { class: "muted" }, "  " + row.lens)),
+        el("div", { class: "numbers small" },
+          el("span", {}, `tension ${fmt(row.score)}`),
+          el("span", { class: "muted" }, `ground ${fmt(row.intelligibility)}`),
+          el("span", { class: "muted" }, `divergence ${fmt(row.novelty)}`))));
+    if (row.lines.length) node.append(el("div", { class: "small faint" },
+      `contested by them ${fmt(row.contested_by)} · contests them ${fmt(row.contests)}`));
+    for (const line of row.lines) {
+      // the work that does the contesting sits on the side of whoever holds it
+      const axis = line.toward === "me" ? `← ${line.axis}` : `${line.axis} →`;
+      node.append(el("div", { class: "line" },
+        el("span", {}, line.yours), el("span", { class: "axis" }, axis + (line.disputed ? " (disputed)" : "")),
+        el("span", { class: "theirs" }, line.theirs)));
+    }
+    if (row.shared_works.length) node.append(el("div", { class: "small faint" }, "both hold: " + row.shared_works.join(", ")));
+    return node;
+  }));
+}
+
+function drawField(rows, floor) {
+  const svg = $("field"), NS = "http://www.w3.org/2000/svg";
+  const W = 560, H = 320, L = 44, B = 36, T = 12, R = 12;
+  const x = (v) => L + v * (W - L - R), y = (v) => H - B - v * (H - B - T);
+  const make = (tag, attrs, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (text) n.textContent = text;
+    return n;
+  };
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const colors = { challenge: css("--paprika"), ground: css("--cornflower"), below: css("--ink-faint"), unknown: css("--ink-faint") };
+  const parts = [
+    make("line", { x1: x(0), y1: y(0), x2: x(1), y2: y(0), stroke: css("--hairline-strong") }),
+    make("line", { x1: x(0), y1: y(0), x2: x(0), y2: y(1), stroke: css("--hairline-strong") }),
+    make("line", { x1: x(floor), y1: y(0), x2: x(floor), y2: y(1), stroke: css("--hairline-strong"), "stroke-dasharray": "2 4" }),
+    make("text", { x: x(1), y: H - 10, "text-anchor": "end" }, "shared ground"),
+    make("text", { x: x(floor) + 6, y: T + 10 }, "floor"),
+    make("text", { x: 12, y: y(1) + 4, transform: `rotate(-90 12 ${y(1) + 4})`, "text-anchor": "end" }, "divergence"),
+  ];
+  for (const row of rows) {
+    if (row.intelligibility === null) continue;
+    const cx = x(row.intelligibility), cy = y(row.novelty), color = colors[LENS[row.lens]];
+    parts.push(make("circle", { cx, cy, r: 5, fill: css("--void"), stroke: color, "stroke-width": 2 }));
+    parts.push(make("text", { x: cx + 9, y: cy + 4, style: `fill:${css("--ink")}` }, row.name));
+  }
+  svg.replaceChildren(...parts);
+}
+
+async function readAll(fileList) {
+  const files = [];
+  for (const file of fileList) {
+    const path = file.webkitRelativePath || file.name;
+    if (!READABLE.test(path) || path.split("/").some((part) => part.startsWith("."))) continue;
+    files.push({ path, text: await file.text() });
+  }
+  return files;
+}
+
+async function walk(entry, out) {
+  if (entry.isFile) {
+    const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+    Object.defineProperty(file, "webkitRelativePath", { value: entry.fullPath.replace(/^\//, "") });
+    out.push(file);
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+      if (!batch.length) break;
+      for (const child of batch) await walk(child, out);
+    }
+  }
+}
+
+function addPerson(fileList) {
+  return act(async () => {
+    const name = $("name").value.trim();
+    if (!name) throw new Error("a person needs a name");
+    const files = await readAll(fileList);
+    if (!files.length) throw new Error("nothing readable in those files");
+    me = me || name;
+    setState(await api("/api/person", { name, files }));
+    $("name").value = "";
+  });
+}
+
+$("pick-files").addEventListener("click", () => $("files").click());
+$("pick-folder").addEventListener("click", () => $("folder").click());
+for (const id of ["files", "folder"]) $(id).addEventListener("change", async (event) => { await addPerson(event.target.files); event.target.value = ""; });
+const drop = $("drop");
+drop.addEventListener("dragover", (event) => { event.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", async (event) => {
+  event.preventDefault(); drop.classList.remove("over");
+  const entries = [...event.dataTransfer.items].map((item) => item.webkitGetAsEntry && item.webkitGetAsEntry()).filter(Boolean);
+  const files = [];
+  if (entries.length) for (const entry of entries) await walk(entry, files); else files.push(...event.dataTransfer.files);
+  addPerson(files);
+});
+$("fetch").addEventListener("click", () => act(async () => {
+  const name = $("name").value.trim();
+  if (!name) throw new Error("a person needs a name");
+  setState(await api("/api/arena", { name, channel: $("channel").value }));
+  $("name").value = ""; $("channel").value = "";
+}));
+$("save-relations").addEventListener("click", () => act(async () => setState(await api("/api/relations", { text: $("relations").value }))));
+$("examples").addEventListener("click", () => act(async () => setState(await api("/api/examples", {}))));
+$("reset").addEventListener("click", () => act(async () => setState(await api("/api/reset", {}))));
+let typing;
+$("topic").addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(rank, 250); });
+
+act(async () => setState(await api("/api/state")));
+</script>
+</body>
+</html>
