@@ -6,7 +6,9 @@
 #
 #   make lib     build/libcyphtension.{dylib,so}: the C-callable library the
 #                Python package loads (tension/_haskell.py)
-#   make test    the property tests (test/Properties.hs)
+#   make test    the property tests (test/Properties.hs, test/PairProperties.hs)
+#   make figure13  rewrite test/golden/figure13.tsv, the figure's curve from
+#                Cyph.Pair (the golden test then holds the model to it)
 #   make bundle  (Linux) build/dist/: the library and the GHC runtime
 #                libraries it needs, side by side, for the image
 #   make clean
@@ -18,12 +20,12 @@ GHC ?= $(shell command -v ghc 2>/dev/null || echo $(HOME)/.ghcup/bin/ghc)
 UNAME := $(shell uname -s)
 LIB_EXT := $(if $(filter Darwin,$(UNAME)),dylib,so)
 LIB := build/libcyphtension.$(LIB_EXT)
-SRC := src/Cyph/Tension.hs src/Cyph/TensionFFI.hs
+SRC := src/Cyph/Tension.hs src/Cyph/TensionFFI.hs src/Cyph/Pair.hs
 # The library links GHC's runtime libraries dynamically. On Linux it also
 # looks for them beside itself ($ORIGIN), where `make bundle` puts them.
 RPATH := $(if $(filter Darwin,$(UNAME)),,-optl-Wl,-rpath,'$$ORIGIN')
 
-.PHONY: lib test bundle clean
+.PHONY: lib test figure13 bundle clean
 
 lib: $(LIB)
 
@@ -34,12 +36,21 @@ $(LIB): $(SRC)
 	$(GHC) -O2 -Wall -fPIC -shared -dynamic -flink-rts $(RPATH) -isrc \
 	  -odir build/obj -hidir build/obj -o $@ $(SRC)
 
-test: build/properties
+test: build/properties build/pair-properties
 	./build/properties
+	./build/pair-properties
+
+figure13: build/pair-properties
+	@mkdir -p test/golden
+	./build/pair-properties --figure13 > test/golden/figure13.tsv
 
 build/properties: src/Cyph/Tension.hs test/Properties.hs
 	@mkdir -p build/test
 	$(GHC) -O2 -isrc -odir build/test -hidir build/test -o $@ test/Properties.hs
+
+build/pair-properties: src/Cyph/Tension.hs src/Cyph/Pair.hs test/PairProperties.hs
+	@mkdir -p build/pair-test
+	$(GHC) -O2 -isrc -odir build/pair-test -hidir build/pair-test -o $@ test/PairProperties.hs
 
 # The library plus every libHS*.so it loads, so a runtime image needs no GHC
 # install (only libgmp, which the image installs).
