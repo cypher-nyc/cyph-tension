@@ -111,6 +111,10 @@ genConfig = do
   m <- int 0 6
   ws <- mapM (const (double 0 2)) [1 :: Int, 2, 3]
   cap <- double 0.2 3
+  rch <- double 0 1
+  nov <- double 0 0.95
+  budget <- int 1 6
+  gg <- elements [0, 0, 0.3, 0.5, 1]
   let [wc, wm, wr] = ws
   pure
     (defaultConfig modelId)
@@ -123,6 +127,10 @@ genConfig = do
       , minLibrarySize = m
       , typeWeights = TypeWeights wc wm wr
       , workCap = cap
+      , reach = rch
+      , noveltyRate = nov
+      , hopBudget = budget
+      , graphGround = gg
       }
 
 universe :: [WorkId]
@@ -134,6 +142,15 @@ genLibrary = library <$> listOf 0 12 (elements universe)
 genLink :: Gen Link
 genLink = Link <$> elements universe <*> elements universe <*> elements [minBound .. maxBound] <*> double (-0.2) 1.2
 
+genHop :: Gen Hop
+genHop = do
+  kin <- bool
+  c <- double (-0.2) 1.2
+  if kin then pure (Kin c) else (\t -> Contest t c) <$> elements [minBound .. maxBound]
+
+genPath :: Gen Path
+genPath = Path <$> elements universe <*> elements universe <*> listOf 0 6 genHop
+
 -- | Random-pair cosines from a skewed, tied-in-places sample.
 genCalibrations :: Gen Calibrations
 genCalibrations = do
@@ -143,6 +160,22 @@ genCalibrations = do
 
 data PairCase = PairCase Config Library Library Double [Link]
   deriving (Show)
+
+data PathCase = PathCase Config Library Library Double [Path]
+  deriving (Show)
+
+pathGen :: Gen (PathCase, Shown Calibrations)
+pathGen = do
+  (PairCase cfg a b c _, cals) <- genPair
+  ps <- listOf 0 25 genPath
+  pure (PathCase cfg a b c ps, Shown cals)
+
+scoreP :: Calibrations -> PathCase -> Either ScoreError (Maybe UnitInterval)
+scoreP cals (PathCase cfg a b c ps) = scorePaths cfg cals a b c ps
+
+-- | One contest reached through @h@ hops: kinship edges, then the contest.
+reached :: Int -> Path
+reached h = Path "a0" "b0" (replicate (h - 1) (Kin 1) ++ [Contest Contests 1])
 
 -- Calibrations has no useful Show of its own here; it travels beside the case
 genPair :: Gen (PairCase, Calibrations)
@@ -284,6 +317,67 @@ laws =
                 Left e -> Just (show e)
       )
   , forAll
+      "over paths: the score is in [0, 1] or Nothing, and symmetric, exactly"
+      5000
+      pathGen
+      ( \(pc@(PathCase cfg a b c ps), Shown cals) ->
+          let ab = scoreP cals pc
+              ba = scoreP cals (PathCase cfg b a c ps)
+           in case ab of
+                Left e -> Just ("error " ++ show e)
+                Right r -> expect (ab == ba && maybe True (\t -> unUnit t >= 0 && unUnit t <= 1) r) (show ab ++ " vs " ++ show ba)
+      )
+  , forAll
+      "one more path never lowers the contest or the kinship; the same path twice counts once"
+      5000
+      ((,) <$> pathGen <*> genPath)
+      ( \((PathCase cfg a b _ ps, _), q) ->
+          expect
+            ( contestStrength cfg a b (q : ps) >= contestStrength cfg a b ps
+                && kinStrength cfg a b (q : ps) >= kinStrength cfg a b ps
+                && contestStrength cfg a b (ps ++ ps) == contestStrength cfg a b ps
+            )
+            "evidence fell, or doubled"
+      )
+  , forAll
+      "a path is a contest on an odd number of dissonant edges and kinship on an even one, never both"
+      5000
+      ((,) <$> genConfig <*> genPath)
+      ( \(cfg, q) ->
+          let dis = length [() | Contest _ _ <- pathHops q]
+              ct = pathContestStrength cfg q
+              kn = pathKinStrength cfg q
+           in expect ((odd dis || ct == 0) && (even dis || kn == 0) && ct >= 0 && kn >= 0) (show (dis, ct, kn))
+      )
+  , forAll
+      "a direct line is a path of one hop: links and their paths score the same"
+      5000
+      pairGen
+      ( \(pc@(PairCase cfg a b c ls), Shown cals) ->
+          expect (score cals pc == scoreP cals (PathCase cfg a b c (map linkPath ls))) "links and paths disagree"
+      )
+  , forAll
+      "the inverted U is in the model: a contest's worth rises to one peak in hops and falls from it"
+      5000
+      genConfig
+      ( \cfg ->
+          let ws = map (pathContestStrength cfg . reached) [1 .. hopBudget cfg + 1]
+              steps = zipWith (-) (drop 1 ws) ws
+              after = dropWhile (<= 1e-12) (dropWhile (>= -1e-12) steps)
+           in expect (null after && last ws == 0) ("not one peak, or evidence past the budget: " ++ show ws)
+      )
+  , forAll
+      "graph ground: off, shared ground is the percentile; on, more kinship never lowers it"
+      5000
+      ((,,,) <$> genConfig <*> unit' <*> double 0 5 <*> double 0 5)
+      ( \(cfg, i, k, dk) ->
+          expect
+            ( ground cfg {graphGround = 0} i k == i
+                && ground cfg i k <= ground cfg i (k + dk)
+            )
+            "ground"
+      )
+  , forAll
       "a table: lower <= mean, both in [0, 1]; Nothing under two pairs"
       5000
       ((,) <$> genConfig <*> listOf 0 8 (elements [Nothing, Just ()] >>= traverse (const unit')))
@@ -306,9 +400,21 @@ facts =
   , ("percentile: 0 at the bottom, 1 at the top, mid-rank in between", map (unUnit . percentile cal) [0, 0.2, 0.3, 0.4, 1] == [0, 0, 0.5, 1, 1])
   , ("unitInterval refuses what is outside [0, 1]", map unitInterval [-0.1, 1.1, 0 / 0] == [Nothing, Nothing, Nothing])
   , ("peak height at k = 1 is 1/4", peakHeight 1 == 0.25)
+  , ("at the defaults a contest two hops away outweighs a direct one, and three hops", worth 2 > worth 1 && worth 2 > worth 3 && worth 3 > worth 4)
+  , ("past the hop budget a path is not evidence", worth 5 == 0)
+  , ("two works that refute the same third are kin, not a contest", pathContestStrength dflt enemyOfEnemy == 0 && pathKinStrength dflt enemyOfEnemy > 0)
+  , ("readers with no path between them: no contest, so no tension", noPaths == Right (Just (clampUnit 0)))
+  , ("readers with no work in common and no direct line still score, through a two-hop contest", fmap (fmap ((> 0) . unUnit)) twoHop == Right (Just True))
   , ("lower = mean − λσ: {0.2, 0.6}, λ = 1 → 0.4 and 0.2", tbl == Just (0.4, 0.2))
   ]
   where
+    dflt = defaultConfig modelId
+    worth = pathContestStrength dflt . reached
+    enemyOfEnemy = Path "a0" "b0" [Contest Refutes 1, Contest Refutes 1]
+    libA = library ["a" ++ show i | i <- [0 :: Int .. 5]]
+    libB = library ["b" ++ show i | i <- [0 :: Int .. 5]]
+    noPaths = scorePaths dflt cals libA libB 0.35 []
+    twoHop = scorePaths dflt cals libA libB 0.35 [Path "a0" "b0" [Kin 0.9, Contest Refutes 0.8]]
     cal = either (error . show) id (calibration modelId [0.2, 0.3, 0.4])
     cals = either (error . show) id (calibrations [cal])
     noCal = scorePair (defaultConfig "other-model") cals (library []) (library []) 0.3 []
@@ -339,17 +445,20 @@ peakAndCutoff t kc = (round2 peak, round2 cutoff)
     cutoff = last [d | d <- grid, ungated d > 0, curve t kc d >= 0.5 * ungated d]
     round2 x = fromIntegral (round (x * 100) :: Int) / 100
 
--- | The figure as published (τ at its default, 0.02): one row per d.
+-- | The figure as published: a contest's weight by the hops it is reached
+-- through, at the model's own reach, novelty and budget, with the two
+-- opposing terms it is the product of. One row per hop, two past the
+-- budget.
 figureTsv :: String
 figureTsv =
   unlines
-    ( "d\tkc0\tkc1\tkc2"
-        : [ fmt d ++ concatMap (\kc -> '\t' : fmt (curve (tau (defaultConfig modelId)) kc d)) [0, 1, 2]
-          | i <- [0 :: Int .. 400]
-          , let d = fromIntegral i / 400
+    ( "hops\treach\tnovelty\tweight"
+        : [ show h ++ concatMap (\x -> '\t' : fmt x) [reach cfg ** fromIntegral (h - 1), 1 - noveltyRate cfg ** fromIntegral h, pathContestStrength cfg (reached h)]
+          | h <- [1 .. hopBudget cfg + 2]
           ]
     )
   where
+    cfg = defaultConfig modelId
     fmt x = showFFloat (Just 6) x ""
 
 goldenPath :: FilePath
@@ -360,10 +469,10 @@ golden = do
   stored <- readFile goldenPath
   let sharp = [peakAndCutoff 1e-6 kc | kc <- [0, 1, 2]]
   pure
-    [ ( "figure 13, τ → 0: peaks 0.50 / 0.58 / 0.63, cutoffs 0.85 / 0.92 / 0.95 — got " ++ show sharp
+    [ ( "the gate against I = 1 − d, N = d, τ → 0: peaks 0.50 / 0.58 / 0.63, cutoffs 0.85 / 0.92 / 0.95 — got " ++ show sharp
       , sharp == [(0.50, 0.85), (0.58, 0.92), (0.63, 0.95)]
       )
-    , ("figure 13, as drawn (τ = 0.02): the curve matches " ++ goldenPath, stored == figureTsv)
+    , ("figure 13, as drawn (a contest's weight by hops): the model's numbers match " ++ goldenPath, stored == figureTsv)
     ]
 
 -- ─── main ──────────────────────────────────────────────────────────────

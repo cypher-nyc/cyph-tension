@@ -13,11 +13,12 @@
 -- nothing else.
 --
 -- Every function is total and pure: scalars in, a scalar in [0, 1] out.
--- @tension/model.py@ is the same model in Python, operation for operation,
--- so the two agree to the last bit on IEEE doubles
--- (@tests/test_parity.py@).
+-- This is the only implementation: Python calls it through the C library
+-- (@tension/@), and @tests/test_golden.py@ pins its outputs to the bit. The
+-- order of operations below was set to match the retired Python reference
+-- exactly, which is why some comments still name Python's behaviour.
 module Cyph.Tension
-  ( -- * Constants (the tuning surface; must equal the Python ones)
+  ( -- * Constants (the tuning surface; Python reads these names too)
     iFloor
   , cosLo
   , cosHi
@@ -52,6 +53,14 @@ module Cyph.Tension
   , lineStrength
     -- * Groups (nobody left without a counterpart)
   , groupFloor
+    -- * Contests reached through the graph (the inverted U, in hops)
+  , hopReach
+  , hopNovelty
+  , maxHops
+  , hopWeightWith
+  , hopWeight
+  , pathContestWith
+  , pathContest
   ) where
 
 -- | Mutual-intelligibility floor: below it the score is zero, not small
@@ -234,3 +243,64 @@ groupFloor rows =
       case [x | (j, Just x) <- zip [0 :: Int ..] row, j /= i] of
         [] -> Nothing
         (x : xs) -> Just (foldl (\m y -> if y > m then y else m) x xs)
+
+-- | How much of a contest survives each further hop between two works:
+-- what a reader can still take in falls with distance. A starting point,
+-- not fitted.
+hopReach :: Double
+hopReach = 0.7
+
+-- | How fast what is new to a reader builds up with hops: a contest
+-- between neighbouring works is the least new. At 0 every distance is as
+-- new as any other and only reach is left. A starting point, not fitted.
+hopNovelty :: Double
+hopNovelty = 0.6
+
+-- | The hop budget: a path longer than this is not evidence.
+maxHops :: Int
+maxHops = 4
+
+-- | The weight of a contest by how many hops of the graph it is reached
+-- through: @reach^(h − 1) · (1 − novelty^h)@, divided by its largest value
+-- within the budget, so the best distance weighs 1. Reach falls with hops
+-- and novelty rises, so their product rises to one peak and falls from it
+-- (Nooteboom's two opposing terms, measured on the graph instead of
+-- assumed): the inverted U is in the formula. Outside @1..limit@ the
+-- weight is 0. With @novelty = 0@ it is plain decay from a direct line,
+-- and with @limit = 1@ only direct lines count, at full weight: the model
+-- as it was before paths.
+hopWeightWith :: Double -> Double -> Int -> Int -> Double
+hopWeightWith reach novelty limit hops
+  | hops < 1 || hops > budget = 0.0
+  | peak > 0.0 = clamp01 (raw hops / peak)
+  | otherwise = 0.0
+  where
+    budget = if limit < 64 then limit else 64
+    r = clamp01 reach
+    v = clamp01 novelty
+    raw :: Int -> Double
+    raw k = r ** fromIntegral (k - 1) * (1.0 - v ** fromIntegral k)
+    -- left-to-right over the budget, as the Python does
+    peak = foldl (\m k -> let x = raw k in if x > m then x else m) 0.0 [1 .. budget]
+
+-- | 'hopWeightWith' at the model's own reach, novelty and budget.
+hopWeight :: Int -> Double
+hopWeight = hopWeightWith hopReach hopNovelty maxHops
+
+-- | What one path between two works adds to the strength of the contest
+-- between their readers. A path is a contest when an odd number of its
+-- edges are on the dissonance axis: a work that builds on what another
+-- refutes stands against it, while two works that refute the same third
+-- stand together (structural balance; Cartwright & Harary 1956). Its
+-- strength (the product of its edges', from the caller) is held to [0, 1],
+-- unreadable counting as none, and weighed by its length.
+pathContestWith :: Double -> Double -> Int -> Int -> Int -> Double -> Double
+pathContestWith reach novelty limit hops dissonant strength
+  | dissonant < 1 || even dissonant = 0.0
+  | otherwise = s * hopWeightWith reach novelty limit hops
+  where
+    s = if strength > 0.0 then (if strength < 1.0 then strength else 1.0) else 0.0
+
+-- | 'pathContestWith' at the model's own reach, novelty and budget.
+pathContest :: Int -> Int -> Double -> Double
+pathContest = pathContestWith hopReach hopNovelty maxHops

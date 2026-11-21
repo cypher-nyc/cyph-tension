@@ -242,6 +242,57 @@ laws =
                   "floor off"
               _ -> Just "no floor for a readable group"
     )
+  , ( "a hop's weight is in [0, 1], 0 outside the budget, and 1 at the best distance"
+    , 4
+    , \[r, v, a, b] ->
+        let limit = floor (a * 6) :: Int
+            hops = floor (b * 8) :: Int
+            w = hopWeightWith r v limit hops
+            ws = map (hopWeightWith r v limit) [1 .. limit]
+         in expect
+              ( unit w
+                  && (not (hops < 1 || hops > limit) || w == 0)
+                  && (null ws || maximum ws == 0 || maximum ws == 1)
+              )
+              ("weight " ++ show w ++ " of " ++ show ws)
+    )
+  , ( "the inverted U, in hops: the weight rises to one peak and falls from it"
+    , 3
+    , \[r, v, a] ->
+        let limit = 1 + floor (abs a * 6) :: Int
+            ws = map (hopWeightWith r v limit) [1 .. limit]
+            steps = zipWith (-) (drop 1 ws) ws
+            -- once it has fallen it never rises again
+            after = dropWhile (<= eps) (dropWhile (>= negate eps) steps)
+         in expect (null after) ("not one peak: " ++ show ws)
+    )
+  , ( "with no novelty term a direct line weighs 1 and each hop only loses; with a budget of 1 it is the model before paths"
+    , 3
+    , \[r, v, a] ->
+        let limit = 1 + floor (abs a * 6) :: Int
+            ws = map (hopWeightWith r 0 limit) [1 .. limit]
+         in expect
+              ( take 1 ws == [1]
+                  && and (zipWith (>=) ws (drop 1 ws))
+                  && (clamp01 v >= 1 || hopWeightWith r v 1 1 == 1)
+              )
+              (show ws)
+    )
+  , ( "a path is a contest only on an odd number of dissonant edges, and never weighs more than its strength"
+    , 4
+    , \[a, b, s, x] ->
+        let hops = floor (a * 6) :: Int
+            dis = floor (b * 6) :: Int
+            p = pathContest hops dis s
+            p' = pathContest hops dis (s + abs x)
+         in expect
+              ( unit p
+                  && (not (dis < 1 || even dis) || p == 0)
+                  && p <= max 0 (min 1 s) + eps
+                  && p' + eps >= p
+              )
+              ("path " ++ show p)
+    )
   ]
 
 -- | Facts about the constants: each blend is a whole, the band is a band.
@@ -255,6 +306,9 @@ constants =
   , ("a car nobody could read has no score", carMean [] == Nothing)
   , ("a group nobody could read has no floor", groupFloor [[Nothing, Nothing], [Nothing, Nothing]] == Nothing)
   , ("κ and ρ are off until fitted", kappaAbsorb == 0 && lineDependence == 0)
+  , ("0 < HOP_REACH < 1, 0 <= HOP_NOVELTY < 1, MAX_HOPS >= 1", hopReach > 0 && hopReach < 1 && hopNovelty >= 0 && hopNovelty < 1 && maxHops >= 1)
+  , ("the best distance is not a direct line: two hops outweigh one, and three", hopWeight 2 == 1 && hopWeight 1 < 1 && hopWeight 3 < 1 && hopWeight 4 < hopWeight 3)
+  , ("past the hop budget nothing counts", hopWeight (maxHops + 1) == 0 && hopWeight 0 == 0)
   ]
 
 main :: IO ()

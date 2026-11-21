@@ -20,10 +20,10 @@ opposition without common language entrenches people. Divergence is only ever
 read from evidence (one work contests another; a reader wrote down that they
 disagree), never from how far apart two vectors are.
 
-The model is written in Haskell (`haskell/src/Cyph/Tension.hs`, about 230
-lines, no dependencies) and again in Python (`tension/model.py`). The two
-agree to the last bit, and a test holds them to it. It was written for
-[cyph](https://cyph.city). It uses no language model.
+The model is written once, in Haskell (`haskell/src/Cyph/Tension.hs` and
+`Pair.hs`, no dependencies), compiled into a small C library. Python calls it
+(`tension/`); there is no second copy of the model to drift from the first. It
+was written for [cyph](https://cyph.city). It uses no language model.
 
 The reasoning, the research behind each term, every constant and the open
 questions are in [docs/MODEL.md](docs/MODEL.md). That document is where to
@@ -31,9 +31,11 @@ start if you want to contest the model.
 
 ## try it
 
-Python 3.10 or later. Nothing to install.
+Python 3.10 or later, and GHC (9.10, base only; [ghcup](https://www.haskell.org/ghcup/)
+installs it) to build the model once.
 
 ```bash
+make -C haskell lib
 python3 -m playground
 ```
 
@@ -135,14 +137,14 @@ how far that person contests you, and how far you contest them.
 ## build and test
 
 ```bash
-python3 -m unittest discover -s tests     # the model, the importers, the ranking
+make -C haskell lib                       # the compiled model, which Python calls
 make -C haskell test                      # the model's claims as laws (GHC 9.10, base only)
-make -C haskell lib                       # the compiled model; Python then serves from it
+python3 -m unittest discover -s tests     # every output to the bit, the importers, the ranking
 ```
 
-Without GHC everything still runs: Python serves its own copy of the model.
-`python3 -m playground` says which one is serving. `TENSION_BACKEND=python`
-forces the Python copy.
+`tests/golden/tension.json` holds what the model returns on 9,901 inputs, to
+the bit; a change that moves any of them fails. When the model is meant to
+change, regenerate it (`python3 -m tests.golden.make_golden`) and say why.
 
 ## what is here
 
@@ -150,8 +152,8 @@ forces the Python copy.
 |---|---|
 | `haskell/src/Cyph/Tension.hs` | the model |
 | `haskell/src/Cyph/TensionFFI.hs` | the model as a C library, for any language |
-| `haskell/test/Properties.hs` | 27 laws and facts, each law checked over 5,000 generated inputs |
-| `tension/` | the model in Python, and the loader for the compiled one |
+| `haskell/test/` | the model's laws and facts, each law checked over thousands of generated inputs |
+| `tension/` | the model's Python face: its constants and signatures, each a call into the library |
 | `playground/` | importers, the gathering of inputs, the page and the command line |
 | `examples/` | six small invented libraries, a relations file, and the reference shelves the band is measured on |
 | `docs/MODEL.md` | the model in writing |
@@ -166,9 +168,8 @@ most useful contributions are not code:
 - a better account of what counts as a recorded disagreement;
 - relations between works in a field you know.
 
-Open an issue with your case. A change to the model itself goes in both
-`Tension.hs` and `tension/model.py`, and the property tests and the parity
-test have to hold.
+Open an issue with your case. A change to the model itself goes in
+`haskell/src/Cyph/`, and the property tests have to hold.
 
 ## licence
 

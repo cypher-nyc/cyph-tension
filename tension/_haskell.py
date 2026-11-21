@@ -4,11 +4,9 @@
 """
 The compiled Haskell model, loaded through ctypes.
 
-`TENSION_BACKEND` chooses:
-
-    auto     (default) Haskell when the library loads, else Python
-    haskell  Haskell; if the library cannot load, Python, logged as an error
-    python   Python only; the library is never loaded
+The model has one implementation, this library; `tension.model` calls it
+and nothing else (`require`). Without it there is no model to call, so the
+import fails with how to build it.
 
 `CYPH_TENSION_LIB` overrides where the library is looked for; by default
 `haskell/build/libcyphtension.{so,dylib}` in this repository. The GHC
@@ -62,6 +60,8 @@ class HaskellTension:
         self._pair_intelligibility.argtypes = [_D, _D, ctypes.c_int]
 
         self._absorb_with = fn("cyph_absorb_with", 3)
+        self._hop_weight_with = fn("cyph_hop_weight_with", 4)
+        self._path_contest_with = fn("cyph_path_contest_with", 6)
 
         self._line_strength_with = lib.cyph_line_strength_with
         self._line_strength_with.restype = _D
@@ -91,6 +91,9 @@ class HaskellTension:
                 "W_TOPIC",
                 "KAPPA_ABSORB",
                 "LINE_DEPENDENCE",
+                "HOP_REACH",
+                "HOP_NOVELTY",
+                "MAX_HOPS",
             )
         }
 
@@ -140,6 +143,25 @@ class HaskellTension:
     def line_strength(self, strengths: Iterable[float]) -> float:
         return self.line_strength_with(self.constants["LINE_DEPENDENCE"], strengths)
 
+    # hop counts cross as whole-number doubles (the C side truncates them back)
+    def hop_weight_with(self, reach: float, novelty: float, max_hops: int, hops: int) -> float:
+        return self._hop_weight_with(float(reach), float(novelty), float(int(max_hops)), float(int(hops)))
+
+    def hop_weight(self, hops: int) -> float:
+        k = self.constants
+        return self.hop_weight_with(k["HOP_REACH"], k["HOP_NOVELTY"], k["MAX_HOPS"], hops)
+
+    def path_contest_with(
+        self, reach: float, novelty: float, max_hops: int, hops: int, dissonant: int, strength: float
+    ) -> float:
+        return self._path_contest_with(
+            float(reach), float(novelty), float(int(max_hops)), float(int(hops)), float(int(dissonant)), float(strength)
+        )
+
+    def path_contest(self, hops: int, dissonant: int, strength: float) -> float:
+        k = self.constants
+        return self.path_contest_with(k["HOP_REACH"], k["HOP_NOVELTY"], k["MAX_HOPS"], hops, dissonant, strength)
+
     def group_floor(self, matrix: Iterable[Iterable[Optional[float]]]) -> Optional[float]:
         rows = [[math.nan if v is None else float(v) for v in row] for row in matrix]
         n = len(rows)
@@ -171,9 +193,7 @@ def library_path() -> Path:
 
 
 def open_library(path: Optional[Path] = None) -> HaskellTension:
-    """Open the compiled model whatever `TENSION_BACKEND` says (the parity
-    test uses this to check the library even on a python-backed run). One
-    instance per path per process, so the GHC runtime starts once. Raises
+    """Open the compiled model at `path`. One instance per path per process, so the GHC runtime starts once. Raises
     OSError / AttributeError when the library is missing or incomplete."""
     path = Path(path or library_path())
     key = str(path)
@@ -186,27 +206,20 @@ def open_library(path: Optional[Path] = None) -> HaskellTension:
     return _opened[key]
 
 
-def backend_choice() -> str:
-    choice = os.environ.get("TENSION_BACKEND", "auto").strip().lower()
-    return choice if choice in {"auto", "haskell", "python"} else "auto"
-
-
-def load() -> Optional[HaskellTension]:
-    """The compiled model, or None when Python should serve. Loads once."""
+def require() -> HaskellTension:
+    """The compiled model, loaded once. Raises with how to build it when the
+    library is missing or incomplete."""
     global _loaded, _tried
-    if _tried:
+    if _loaded is not None:
         return _loaded
     _tried = True
-    choice = backend_choice()
-    if choice == "python":
-        logger.info("tension backend: python (TENSION_BACKEND=python)")
-        return None
     path = library_path()
     try:
         _loaded = open_library(path)
     except (OSError, AttributeError) as exc:
-        log = logger.error if choice == "haskell" else logger.info
-        log("tension backend: python (Haskell library unavailable at %s: %s)", path, exc)
-        return None
-    logger.info("tension backend: haskell (%s)", path)
+        raise RuntimeError(
+            f"tension: the Haskell library is not available at {path} ({exc}); "
+            "build it with `make -C haskell lib` (GHC, base only), or set CYPH_TENSION_LIB"
+        ) from exc
+    logger.info("tension model: haskell (%s)", path)
     return _loaded

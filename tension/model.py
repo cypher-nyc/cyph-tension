@@ -2,15 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 """
-The productive-tension model, in Python.
+The productive-tension model, from Python.
 
     tension = gate(I) · I · N · (1 + λ·T)
 
-The same model as `haskell/src/Cyph/Tension.hs`, operation for operation, so
-the two agree to the last bit (`tests/test_parity.py`). The `_py_` functions
-here are the reference; the public names at the bottom are served by the
-compiled Haskell library when it has been built (`make -C haskell lib`) and
-by the reference otherwise. `BACKEND` says which.
+The model is written once, in Haskell (`haskell/src/Cyph/Tension.hs` and
+`Cyph/Pair.hs`), where its claims are stated as properties and checked across
+generated inputs (`make -C haskell test`). This module is its Python face: the
+constants and the signatures, each function a call into the compiled library
+(`tension/_haskell.py`; build it with `make -C haskell lib`). There is no
+Python copy of the model and no fallback. `tests/test_golden.py` pins every
+output to the bit against `tests/golden/tension.json`.
 
 The reasoning and the research behind each term are in `docs/MODEL.md`.
 Every function is pure: scalars in, a scalar out, no I/O.
@@ -18,11 +20,13 @@ Every function is pure: scalars in, a scalar out, no I/O.
 
 from __future__ import annotations
 
-import functools
-import math
 from typing import Iterable, Optional
 
 from tension import _haskell
+
+# The model is the compiled Haskell library; without it nothing here can score.
+_HS = _haskell.require()
+BACKEND = "haskell"
 
 # ─────────────────────────────────────────────────────────────────────
 # Constants
@@ -66,19 +70,15 @@ LAMBDA_TRAJECTORY = 0.35
 T_MAX = 0.15
 
 
-def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
 
 
-def _py_normalize_cosine(cosine: float) -> float:
+def normalize_cosine(cosine: float) -> float:
     """Map a raw embedding cosine onto [0, 1] across the band where real
     document similarities actually live."""
-    if COS_HI <= COS_LO:
-        return _clamp01(cosine)
-    return _clamp01((float(cosine) - COS_LO) / (COS_HI - COS_LO))
+    return _HS.normalize_cosine(cosine)
 
 
-def _py_compute_intelligibility(cos_to_anchor: float, depth_norm: float) -> float:
+def compute_intelligibility(cos_to_anchor: float, depth_norm: float) -> float:
     """Shared ground between a person and a topic — Nooteboom's
     absorptive-capacity term, the factor that DECREASES with epistemic
     distance.
@@ -93,12 +93,10 @@ def _py_compute_intelligibility(cos_to_anchor: float, depth_norm: float) -> floa
 
     Returns [0, 1]. High = they can already speak this language.
     """
-    return _clamp01(
-        W_VEC * _py_normalize_cosine(cos_to_anchor) + W_GRAPH * _clamp01(depth_norm)
-    )
+    return _HS.compute_intelligibility(cos_to_anchor, depth_norm)
 
 
-def _py_compute_novelty(divergent_reading_ratio: float, stance_ratio: float) -> float:
+def compute_novelty(divergent_reading_ratio: float, stance_ratio: float) -> float:
     """Divergence WITHIN topic-relevant zones — Nooteboom's novelty term,
     the factor that INCREASES with epistemic distance.
 
@@ -118,13 +116,10 @@ def _py_compute_novelty(divergent_reading_ratio: float, stance_ratio: float) -> 
 
     Returns [0, 1]. Zero when there is no divergence evidence at all.
     """
-    return _clamp01(
-        READING_W * _clamp01(divergent_reading_ratio)
-        + STANCE_W * _clamp01(stance_ratio)
-    )
+    return _HS.compute_novelty(divergent_reading_ratio, stance_ratio)
 
 
-def _py_compute_trajectory(cos_recent: float, cos_older: float) -> float:
+def compute_trajectory(cos_recent: float, cos_older: float) -> float:
     """Learning progress toward the topic (Kidd et al. 2012; Ten et al.
     2021): how much closer a person's recent territory sits to the topic
     than their older territory did.
@@ -133,13 +128,10 @@ def _py_compute_trajectory(cos_recent: float, cos_older: float) -> float:
     penalized, because a person moving on from a subject still knows it.
     Returns [0, 1], saturating at T_MAX of cosine movement.
     """
-    delta = float(cos_recent) - float(cos_older)
-    if delta <= 0 or T_MAX <= 0:
-        return 0.0
-    return _clamp01(delta / T_MAX)
+    return _HS.compute_trajectory(cos_recent, cos_older)
 
 
-def _py_compute_tension(
+def compute_tension(
     intelligibility: float,
     novelty: float,
     trajectory: float = 0.0,
@@ -163,15 +155,10 @@ def _py_compute_tension(
         0.8  strong divergence with enough shared ground
         1.0  theoretical maximum; in practice may indicate incompatibility
     """
-    intelligibility = _clamp01(intelligibility)
-    if intelligibility < I_FLOOR:
-        return 0.0
-    novelty = _clamp01(novelty)
-    bonus = 1.0 + LAMBDA_TRAJECTORY * _clamp01(trajectory)
-    return _clamp01(intelligibility * novelty * bonus)
+    return _HS.compute_tension(intelligibility, novelty, trajectory)
 
 
-def _py_compute_suitedness(intelligibility: float, trajectory: float = 0.0) -> float:
+def compute_suitedness(intelligibility: float, trajectory: float = 0.0) -> float:
     """How well-suited a person is to a conversation — depth on the topic
     plus live movement toward it, with NO divergence reward.
 
@@ -180,10 +167,7 @@ def _py_compute_suitedness(intelligibility: float, trajectory: float = 0.0) -> f
     kinds in the room, so they are scored separately rather than blended
     into one ranking.
     """
-    intelligibility = _clamp01(intelligibility)
-    if intelligibility < I_FLOOR:
-        return 0.0
-    return _clamp01(intelligibility * (1.0 + LAMBDA_TRAJECTORY * _clamp01(trajectory)))
+    return _HS.compute_suitedness(intelligibility, trajectory)
 
 
 
@@ -196,7 +180,7 @@ W_PEOPLE = 0.5
 W_TOPIC = 0.5
 
 
-def _py_pair_intelligibility(cos_people: float, cos_topic: Optional[float] = None) -> float:
+def pair_intelligibility(cos_people: float, cos_topic: Optional[float] = None) -> float:
     """Shared ground between two people inside a topic.
 
     Args:
@@ -205,30 +189,23 @@ def _py_pair_intelligibility(cos_people: float, cos_topic: Optional[float] = Non
             vector (both must speak the topic), or None when there is
             no topic.
     """
-    people = _py_normalize_cosine(cos_people)
-    if cos_topic is None:
-        return people
-    return _clamp01(W_PEOPLE * people + W_TOPIC * _py_normalize_cosine(cos_topic))
+    return _HS.pair_intelligibility(cos_people, cos_topic)
 
 
-def _py_pair_novelty(contest_strength: float) -> float:
+def pair_novelty(contest_strength: float) -> float:
     """Divergence from recorded positions: summed strength of the contest-
     axis lines between the works that shaped each of them, saturating."""
-    strength = max(0.0, float(contest_strength or 0.0))
-    return _clamp01(1.0 - math.exp(-strength))
+    return _HS.pair_novelty(contest_strength)
 
 
-def _py_pair_tension(intelligibility: float, novelty: float) -> float:
+def pair_tension(intelligibility: float, novelty: float) -> float:
     """The same tension curve with no trajectory bonus."""
-    return _py_compute_tension(intelligibility, novelty, 0.0)
+    return _HS.pair_tension(intelligibility, novelty)
 
 
-def _py_car_score(pair_scores: Iterable[Optional[float]]) -> Optional[float]:
+def car_score(pair_scores: Iterable[Optional[float]]) -> Optional[float]:
     """Mean over the occupants we could read; None when we could read none."""
-    usable = [float(p) for p in pair_scores if p is not None]
-    if not usable:
-        return None
-    return round(sum(usable) / len(usable), 4)
+    return _HS.car_score(pair_scores)
 
 
 
@@ -243,7 +220,7 @@ def _py_car_score(pair_scores: Iterable[Optional[float]]) -> Optional[float]:
 KAPPA_ABSORB = 0.0
 
 
-def _py_absorb_with(kappa: float, intelligibility: float, capacity: float) -> float:
+def absorb_with(kappa: float, intelligibility: float, capacity: float) -> float:
     """Shared ground as a person of capacity `c` experiences it (Nooteboom's
     third hypothesis): `1 − (1 − I)^(1 + κ·c)`.
 
@@ -252,14 +229,12 @@ def _py_absorb_with(kappa: float, intelligibility: float, capacity: float) -> fl
     `d* = (2 + κc)^(−1/(1 + κc))`, which moves outward as capacity grows.
     A negative or unreadable κ is no adjustment.
     """
-    kappa = float(kappa)
-    k = kappa if kappa > 0.0 else 0.0
-    return _clamp01(1.0 - (1.0 - _clamp01(intelligibility)) ** (1.0 + k * _clamp01(capacity)))
+    return _HS.absorb_with(kappa, intelligibility, capacity)
 
 
-def _py_absorb(intelligibility: float, capacity: float) -> float:
+def absorb(intelligibility: float, capacity: float) -> float:
     """`absorb_with` at the model's own κ."""
-    return _py_absorb_with(KAPPA_ABSORB, intelligibility, capacity)
+    return _HS.absorb(intelligibility, capacity)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -272,23 +247,69 @@ def _py_absorb(intelligibility: float, capacity: float) -> float:
 LINE_DEPENDENCE = 0.0
 
 
-def _py_line_strength_with(rho: float, strengths: Iterable[float]) -> float:
+def line_strength_with(rho: float, strengths: Iterable[float]) -> float:
     """The strength of all the lines that stand against one work:
     `max + (1 − ρ)·(sum − max)`. At ρ = 0 the plain sum; at ρ = 1 only the
     strongest line counts. Strengths below zero count as none."""
-    total = 0.0
-    strongest = 0.0
-    for raw in strengths:
-        x = float(raw)
-        x = x if x > 0.0 else 0.0
-        total = total + x
-        strongest = x if x > strongest else strongest
-    return strongest + (1.0 - _clamp01(rho)) * (total - strongest)
+    return _HS.line_strength_with(rho, strengths)
 
 
-def _py_line_strength(strengths: Iterable[float]) -> float:
+def line_strength(strengths: Iterable[float]) -> float:
     """`line_strength_with` at the model's own ρ."""
-    return _py_line_strength_with(LINE_DEPENDENCE, strengths)
+    return _HS.line_strength(strengths)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Contests reached through the graph (the inverted U, in hops)
+# ─────────────────────────────────────────────────────────────────────
+
+# How much of a contest survives each further hop between two works. A
+# starting point, not fitted.
+HOP_REACH = 0.7
+# How fast what is new to a reader builds up with hops; at 0 only reach is
+# left. A starting point, not fitted.
+HOP_NOVELTY = 0.6
+# The hop budget: a path longer than this is not evidence.
+MAX_HOPS = 4
+
+
+def hop_weight_with(reach: float, novelty: float, max_hops: int, hops: int) -> float:
+    """The weight of a contest by how many hops of the graph it is reached
+    through: `reach^(h − 1) · (1 − novelty^h)`, divided by its largest
+    value within the budget, so the best distance weighs 1.
+
+    Reach falls with hops and novelty rises, so their product rises to one
+    peak and falls from it: the inverted U is in the formula. Outside
+    `1..max_hops` the weight is 0. With `novelty = 0` it is plain decay
+    from a direct line, and with `max_hops = 1` only direct lines count, at
+    full weight: the model as it was before paths.
+    """
+    return _HS.hop_weight_with(reach, novelty, max_hops, hops)
+
+
+def hop_weight(hops: int) -> float:
+    """`hop_weight_with` at the model's own reach, novelty and budget."""
+    return _HS.hop_weight(hops)
+
+
+def path_contest_with(
+    reach: float, novelty: float, max_hops: int, hops: int, dissonant: int, strength: float
+) -> float:
+    """What one path between two works adds to the strength of the contest
+    between their readers.
+
+    A path is a contest when an odd number of its edges are on the
+    dissonance axis: a work that builds on what another refutes stands
+    against it, while two works that refute the same third stand together.
+    Its strength (the product of its edges', from the caller) is held to
+    [0, 1], unreadable counting as none, and weighed by its length.
+    """
+    return _HS.path_contest_with(reach, novelty, max_hops, hops, dissonant, strength)
+
+
+def path_contest(hops: int, dissonant: int, strength: float) -> float:
+    """`path_contest_with` at the model's own reach, novelty and budget."""
+    return _HS.path_contest(hops, dissonant, strength)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -296,7 +317,7 @@ def _py_line_strength(strengths: Iterable[float]) -> float:
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _py_group_floor(matrix: Iterable[Iterable[Optional[float]]]) -> Optional[float]:
+def group_floor(matrix: Iterable[Iterable[Optional[float]]]) -> Optional[float]:
     """The least well-met person in a group.
 
     For each member, the best pair score they have with anyone else in it;
@@ -306,57 +327,4 @@ def _py_group_floor(matrix: Iterable[Iterable[Optional[float]]]) -> Optional[flo
     None where it could not be read (the diagonal is ignored). Members with
     no readable pair are left out; a group with none has no floor.
     """
-    floor: Optional[float] = None
-    for i, row in enumerate(matrix):
-        best: Optional[float] = None
-        for j, value in enumerate(row):
-            if j == i or value is None:
-                continue
-            x = float(value)
-            if math.isnan(x):
-                continue
-            best = x if best is None or x > best else best
-        if best is None:
-            continue
-        floor = best if floor is None or best < floor else floor
-    return floor
-
-
-# ─────────────────────────────────────────────────────────────────────
-# The public functions: Haskell when its library loads, else Python
-# ─────────────────────────────────────────────────────────────────────
-
-_HS = _haskell.load()
-BACKEND = "haskell" if _HS is not None else "python"
-
-
-def _serve(py, name):
-    """The public function: the Haskell one when loaded (keeping the
-    Python one's name and docstring), else the Python one itself."""
-    if _HS is None:
-        return py
-    hs = getattr(_HS, name)
-
-    @functools.wraps(py)
-    def served(*args, **kwargs):
-        return hs(*args, **kwargs)
-
-    return served
-
-
-normalize_cosine = _serve(_py_normalize_cosine, "normalize_cosine")
-compute_intelligibility = _serve(_py_compute_intelligibility, "compute_intelligibility")
-compute_novelty = _serve(_py_compute_novelty, "compute_novelty")
-compute_trajectory = _serve(_py_compute_trajectory, "compute_trajectory")
-compute_tension = _serve(_py_compute_tension, "compute_tension")
-compute_suitedness = _serve(_py_compute_suitedness, "compute_suitedness")
-
-pair_intelligibility = _serve(_py_pair_intelligibility, "pair_intelligibility")
-pair_novelty = _serve(_py_pair_novelty, "pair_novelty")
-pair_tension = _serve(_py_pair_tension, "pair_tension")
-car_score = _serve(_py_car_score, "car_score")
-absorb_with = _serve(_py_absorb_with, "absorb_with")
-absorb = _serve(_py_absorb, "absorb")
-line_strength_with = _serve(_py_line_strength_with, "line_strength_with")
-line_strength = _serve(_py_line_strength, "line_strength")
-group_floor = _serve(_py_group_floor, "group_floor")
+    return _HS.group_floor(matrix)

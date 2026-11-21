@@ -16,8 +16,8 @@
 --     as NaN, which the Python wrapper turns into @None@ (a real mean of
 --     values in [0, 1] is never NaN).
 --
--- The constants are exported too, so the parity test can pin that the two
--- implementations tune the same model.
+-- The constants are exported too, so the Python face and the golden test
+-- read the very values the model uses.
 module Cyph.TensionFFI () where
 
 import Cyph.Tension
@@ -76,6 +76,15 @@ ffiLineStrengthWith rho ptr n
       xs <- peekArray (fromIntegral n) ptr
       pure (c (lineStrengthWith (d rho) (map d xs)))
 
+-- Hop counts cross as doubles (whole numbers; the Python wrapper sends
+-- them so) and are truncated back.
+ffiHopWeightWith :: CDouble -> CDouble -> CDouble -> CDouble -> CDouble
+ffiHopWeightWith r v limit hops = c (hopWeightWith (d r) (d v) (truncate (d limit)) (truncate (d hops)))
+
+ffiPathContestWith :: CDouble -> CDouble -> CDouble -> CDouble -> CDouble -> CDouble -> CDouble
+ffiPathContestWith r v limit hops dis s =
+  c (pathContestWith (d r) (d v) (truncate (d limit)) (truncate (d hops)) (truncate (d dis)) (d s))
+
 -- | An n-by-n matrix of pair scores, row by row; NaN marks a pair that could
 -- not be read. NaN back when the group has no floor.
 ffiGroupFloor :: Ptr CDouble -> CInt -> IO CDouble
@@ -92,6 +101,8 @@ ffiGroupFloor ptr n
 foreign export ccall "cyph_absorb_with" ffiAbsorbWith :: CDouble -> CDouble -> CDouble -> CDouble
 foreign export ccall "cyph_line_strength_with" ffiLineStrengthWith :: CDouble -> Ptr CDouble -> CInt -> IO CDouble
 foreign export ccall "cyph_group_floor" ffiGroupFloor :: Ptr CDouble -> CInt -> IO CDouble
+foreign export ccall "cyph_hop_weight_with" ffiHopWeightWith :: CDouble -> CDouble -> CDouble -> CDouble -> CDouble
+foreign export ccall "cyph_path_contest_with" ffiPathContestWith :: CDouble -> CDouble -> CDouble -> CDouble -> CDouble -> CDouble -> CDouble
 foreign export ccall "cyph_normalize_cosine" ffiNormalizeCosine :: CDouble -> CDouble
 foreign export ccall "cyph_compute_intelligibility" ffiComputeIntelligibility :: CDouble -> CDouble -> CDouble
 foreign export ccall "cyph_compute_novelty" ffiComputeNovelty :: CDouble -> CDouble -> CDouble
@@ -103,7 +114,7 @@ foreign export ccall "cyph_pair_novelty" ffiPairNovelty :: CDouble -> CDouble
 foreign export ccall "cyph_pair_tension" ffiPairTension :: CDouble -> CDouble -> CDouble
 foreign export ccall "cyph_car_mean" ffiCarMean :: Ptr CDouble -> CInt -> IO CDouble
 
--- The tuning surface, for the parity test.
+-- The tuning surface, for the Python face and the golden test.
 cI_FLOOR, cCOS_LO, cCOS_HI, cW_VEC, cW_GRAPH, cREADING_W, cSTANCE_W :: CDouble
 cLAMBDA_TRAJECTORY, cT_MAX, cW_PEOPLE, cW_TOPIC, cKAPPA_ABSORB, cLINE_DEPENDENCE :: CDouble
 cI_FLOOR = c iFloor
@@ -120,6 +131,11 @@ cW_TOPIC = c wTopic
 cKAPPA_ABSORB = c kappaAbsorb
 cLINE_DEPENDENCE = c lineDependence
 
+cHOP_REACH, cHOP_NOVELTY, cMAX_HOPS :: CDouble
+cHOP_REACH = c hopReach
+cHOP_NOVELTY = c hopNovelty
+cMAX_HOPS = fromIntegral maxHops
+
 foreign export ccall "cyph_const_i_floor" cI_FLOOR :: CDouble
 foreign export ccall "cyph_const_cos_lo" cCOS_LO :: CDouble
 foreign export ccall "cyph_const_cos_hi" cCOS_HI :: CDouble
@@ -133,3 +149,6 @@ foreign export ccall "cyph_const_w_people" cW_PEOPLE :: CDouble
 foreign export ccall "cyph_const_w_topic" cW_TOPIC :: CDouble
 foreign export ccall "cyph_const_kappa_absorb" cKAPPA_ABSORB :: CDouble
 foreign export ccall "cyph_const_line_dependence" cLINE_DEPENDENCE :: CDouble
+foreign export ccall "cyph_const_hop_reach" cHOP_REACH :: CDouble
+foreign export ccall "cyph_const_hop_novelty" cHOP_NOVELTY :: CDouble
+foreign export ccall "cyph_const_max_hops" cMAX_HOPS :: CDouble
