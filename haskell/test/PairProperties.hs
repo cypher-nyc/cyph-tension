@@ -520,9 +520,6 @@ figureFiles =
   , ("research-matching-values.tex", unlines [macro k v | (k, v) <- values])
   , ("research-matching-depthcurve.tsv", table ["n", "c"] [[fromIntegral n, readerCapacity cfg n] | n <- [0 .. 40 :: Int] ++ [45, 50 .. 700]])
   , ("research-matching-absorb.tsv", table ["i", "c0", "c05", "c1"] [[i, ab 0 i, ab 0.5 i, ab 1 i] | i <- steps 100])
-  , ("research-matching-divergence.tsv", table ["s", "n"] [[x, unUnit (divergence cfg x)] | x <- map (* 5) (steps 100)])
-  , ("research-matching-gate.tsv", table ["i", "g"] [[i, gate cfg (clampUnit i)] | i <- map (* 0.4) (steps 200)])
-  , ("research-matching-heat.tex", heat)
   ]
   where
     cfg = defaultConfig modelId
@@ -532,22 +529,6 @@ figureFiles =
     fmt k x = showFFloat (Just k) x ""
     table hdr rows = unlines (tabs hdr : [tabs (map (fmt 6) r) | r <- rows])
     tabs = foldr1 (\a b -> a ++ "\t" ++ b)
-    -- T = g(I') · I' · N over the plane, one square per cell, as dark as
-    -- the score (the page paints a figure through its opacity, not its colour)
-    cells = 20 :: Int
-    heat =
-      unlines
-        [ "\\fill[opacity=" ++ fmt 3 t ++ "] (" ++ fmt 3 x ++ "," ++ fmt 3 y ++ ") rectangle ++(" ++ fmt 3 w ++ "," ++ fmt 3 w ++ ");"
-        | a <- [0 .. cells - 1]
-        , b <- [0 .. cells - 1]
-        , let w = 1 / fromIntegral cells
-              x = fromIntegral a * w
-              y = fromIntegral b * w
-              ip = x + w / 2
-              n = y + w / 2
-              t = gate cfg (clampUnit ip) * ip * n
-        , t >= 0.005
-        ]
     macro k v = "\\newcommand{\\" ++ k ++ "}{" ++ v ++ "}"
     -- the three pairs the paths figure draws: shared ground, and the hops of each contest path drawn
     -- (every edge drawn fully sure, so each path adds its w(h); past the budget adds 0)
