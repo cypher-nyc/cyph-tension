@@ -52,3 +52,28 @@ class Model(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkTensionTests(unittest.TestCase):
+    """A person against a work they have not met (2026-11-23)."""
+
+    def test_no_ground_no_score_however_contested(self):
+        self.assertEqual(tension.work_tension(0.0, 0.0, 10.0), 0.0)
+
+    def test_no_contest_no_score_however_close(self):
+        self.assertEqual(tension.work_tension(0.9, 1.0, 0.0), 0.0)
+
+    def test_close_and_contested_scores(self):
+        t = tension.work_tension(0.7, 0.6, 1.0)
+        self.assertGreater(t, 0.0)
+        self.assertLessEqual(t, 1.0)
+
+    def test_on_the_models_one_curve(self):
+        for c, d, s in [(0.5, 0.2, 0.3), (0.8, 0.9, 2.0), (0.3, 0.0, 1.0)]:
+            self.assertEqual(
+                tension.work_tension(c, d, s),
+                tension.compute_tension(tension.compute_intelligibility(c, d), tension.pair_novelty(s), 0.0),
+            )
+
+    def test_more_engagement_never_lowers_it(self):
+        self.assertGreaterEqual(tension.work_tension(0.6, 0.8, 1.0), tension.work_tension(0.6, 0.2, 1.0))

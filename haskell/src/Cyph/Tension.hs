@@ -38,6 +38,10 @@ module Cyph.Tension
   , computeTrajectory
   , computeTension
   , computeSuitedness
+    -- * A person against a work (what to put in front of someone)
+  , workIntelligibility
+  , workNovelty
+  , workTension
     -- * A person against a person (who should sit together)
   , pairIntelligibility
   , pairNovelty
@@ -152,6 +156,33 @@ computeSuitedness intelligibility trajectory
   | otherwise = clamp01 (i * (1.0 + lambdaTrajectory * clamp01 trajectory))
   where
     i = clamp01 intelligibility
+
+-- | Shared ground between a person and one work (a book, a cyph, a route)
+-- they have not met yet: the person-against-a-topic reading with the work as
+-- the anchor. Half how close the work sits to everything that shaped them
+-- (the cosine of their composite and the work's vector), half how much of
+-- the work's neighbourhood they have actually engaged (@depth@, their share
+-- of activity in its topic). The vector alone is fooled by nearby territory
+-- a person never touched; engagement alone misses relevant reading elsewhere.
+workIntelligibility :: Double -> Double -> Double
+workIntelligibility = computeIntelligibility
+
+-- | What a work could push against in a person: the lines on the dissonance
+-- axis (contests, complicates, refutes; directly or through the graph,
+-- weighted by hops) between the work and the works that shaped them,
+-- summed, saturating as @1 − e^(−s)@ exactly as between two people. Graph
+-- evidence only, never vector distance.
+workNovelty :: Double -> Double
+workNovelty = pairNovelty
+
+-- | Productive tension between a person and a work: enough shared ground to
+-- take the work in, and a recorded disagreement between it and what shaped
+-- them. Zero below the shared-ground floor however strongly it is contested,
+-- zero with no contest however close it sits. No trajectory term: it ranks
+-- what to put in front of someone, not where they are heading.
+workTension :: Double -> Double -> Double -> Double
+workTension cosToWork depth contestStrength =
+  computeTension (workIntelligibility cosToWork depth) (workNovelty contestStrength) 0.0
 
 -- | Shared ground between two people inside a topic. 'Nothing' when there
 -- is no topic: the people half alone.

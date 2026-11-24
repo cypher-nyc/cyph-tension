@@ -142,6 +142,13 @@ make -C haskell test                      # the model's claims as laws (GHC 9.10
 python3 -m unittest discover -s tests     # every output to the bit, the importers, the ranking
 ```
 
+A service calls the model through its Python face: `pip install
+"cyph-tension @ git+https://github.com/cypher-nyc/cyph-tension@<commit>"` (or
+`pip install -e .` in a checkout) gives `import tension`; the library itself
+is built with `make -C haskell lib` and found through `CYPH_TENSION_LIB`.
+`tension.work_tension` scores a person against a work they have not met
+(`docs/MODEL.md`, "What to put in front of someone").
+
 `tests/golden/tension.json` holds what the model returns on 9,901 inputs, to
 the bit; a change that moves any of them fails. When the model is meant to
 change, regenerate it (`python3 -m tests.golden.make_golden`) and say why.

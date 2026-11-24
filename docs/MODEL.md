@@ -67,6 +67,26 @@ suitedness  = gate(I) · I · (1 + λ·T)              who can carry the thread
 Tension finds who will push back. Suitedness finds who can champion the
 conversation. We score both.
 
+## What to put in front of someone
+
+A work (a book, a cyph, a route) the person has not met yet, scored against
+everything that shaped them.
+
+```
+I = clamp( W_VEC · band(cos(person, work)) + W_GRAPH · depth )
+N = 1 − e^(−s)
+tension = gate(I) · I · N
+```
+
+- `I` is the person-against-a-topic ground with the work as the anchor:
+  `depth` is the person's share of activity in the work's neighbourhood.
+- `s` is the summed strength of the lines on the dissonance axis between the
+  work and the works that shaped the person, directly or through the graph
+  (weighted by hops), as between two people.
+- A work the person shares no ground with scores zero however strongly it is
+  contested; a work nothing contests scores zero however close it sits.
+- No trajectory term: it ranks what to offer, not where someone is heading.
+
 ## Who sits together
 
 ```

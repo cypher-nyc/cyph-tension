@@ -37,4 +37,7 @@ from tension.model import (  # noqa: F401
     pair_tension,
     path_contest,
     path_contest_with,
+    work_intelligibility,
+    work_novelty,
+    work_tension,
 )

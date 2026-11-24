@@ -56,6 +56,15 @@ ffiPairIntelligibility people topic has =
 ffiPairNovelty :: CDouble -> CDouble
 ffiPairNovelty = c . pairNovelty . d
 
+ffiWorkIntelligibility :: CDouble -> CDouble -> CDouble
+ffiWorkIntelligibility a b = c (workIntelligibility (d a) (d b))
+
+ffiWorkNovelty :: CDouble -> CDouble
+ffiWorkNovelty a = c (workNovelty (d a))
+
+ffiWorkTension :: CDouble -> CDouble -> CDouble -> CDouble
+ffiWorkTension a b s = c (workTension (d a) (d b) (d s))
+
 ffiPairTension :: CDouble -> CDouble -> CDouble
 ffiPairTension a b = c (pairTension (d a) (d b))
 
@@ -112,6 +121,9 @@ foreign export ccall "cyph_compute_suitedness" ffiComputeSuitedness :: CDouble -
 foreign export ccall "cyph_pair_intelligibility" ffiPairIntelligibility :: CDouble -> CDouble -> CInt -> CDouble
 foreign export ccall "cyph_pair_novelty" ffiPairNovelty :: CDouble -> CDouble
 foreign export ccall "cyph_pair_tension" ffiPairTension :: CDouble -> CDouble -> CDouble
+foreign export ccall "cyph_work_intelligibility" ffiWorkIntelligibility :: CDouble -> CDouble -> CDouble
+foreign export ccall "cyph_work_novelty" ffiWorkNovelty :: CDouble -> CDouble
+foreign export ccall "cyph_work_tension" ffiWorkTension :: CDouble -> CDouble -> CDouble -> CDouble
 foreign export ccall "cyph_car_mean" ffiCarMean :: Ptr CDouble -> CInt -> IO CDouble
 
 -- The tuning surface, for the Python face and the golden test.

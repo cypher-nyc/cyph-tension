@@ -293,6 +293,44 @@ laws =
               )
               ("path " ++ show p)
     )
+  , ( "a work: below the shared-ground floor it scores zero however strongly it is contested"
+    , 3
+    , \[c, dep, st] ->
+        let i = workIntelligibility c dep
+            t = workTension c dep (abs st * 10)
+         in expect (i >= iFloor || t == 0) ("I " ++ show i ++ " scored " ++ show t)
+    )
+  , ( "a work: with no contest it scores zero however close it sits"
+    , 2
+    , \[c, dep] -> let t = workTension c dep 0 in expect (t == 0) (show t)
+    )
+  , ( "a work: the score stays in [0, 1] and never falls as contest strength rises"
+    , 4
+    , \[c, dep, st, x] ->
+        let s1 = abs st * 5
+            t1 = workTension c dep s1
+            t2 = workTension c dep (s1 + abs x)
+         in expect (unit t1 && unit t2 && t2 + eps >= t1) (show (t1, t2))
+    )
+  , ( "a work: more engagement in its neighbourhood never lowers the score"
+    , 4
+    , \[c, dep, st, x] ->
+        let d1 = clamp01 (abs dep)
+            d2 = clamp01 (d1 + abs x)
+            s1 = abs st * 5
+         in expect (workTension c d2 s1 + eps >= workTension c d1 s1) (show (d1, d2))
+    )
+  , ( "a work is scored on the model's one curve: the person-against-a-topic ground and the pair divergence"
+    , 3
+    , \[c, dep, st] ->
+        let s1 = abs st * 5
+         in expect
+              ( workTension c dep s1 == computeTension (computeIntelligibility c dep) (pairNovelty s1) 0
+                  && workIntelligibility c dep == computeIntelligibility c dep
+                  && workNovelty s1 == pairNovelty s1
+              )
+              "the work score left the model's curve"
+    )
   ]
 
 -- | Facts about the constants: each blend is a whole, the band is a band.

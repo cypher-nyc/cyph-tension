@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: cyph-tension
+Version: 0.2.0
+Summary: The productive-tension model: who should talk to whom, and what to put in front of someone.
+License: MPL-2.0
+Requires-Python: >=3.10
+License-File: LICENSE
+Dynamic: license-file

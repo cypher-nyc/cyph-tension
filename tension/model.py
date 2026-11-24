@@ -203,6 +203,26 @@ def pair_tension(intelligibility: float, novelty: float) -> float:
     return _HS.pair_tension(intelligibility, novelty)
 
 
+def work_intelligibility(cos_to_work: float, depth: float) -> float:
+    """Shared ground between a person and a work they have not met: half the
+    cosine of their composite and the work's vector (banded), half their
+    engagement in the work's neighbourhood (`depth`, in [0, 1])."""
+    return _HS.work_intelligibility(cos_to_work, depth)
+
+
+def work_novelty(contest_strength: float) -> float:
+    """What the work could push against in them: the summed strength of the
+    contest lines between it and the works that shaped them, as 1 − e^(−s).
+    Graph evidence only."""
+    return _HS.work_novelty(contest_strength)
+
+
+def work_tension(cos_to_work: float, depth: float, contest_strength: float) -> float:
+    """Productive tension between a person and a work: gate(I) · I · N with
+    the two terms above. Zero below the floor, zero with no contest."""
+    return _HS.work_tension(cos_to_work, depth, contest_strength)
+
+
 def car_score(pair_scores: Iterable[Optional[float]]) -> Optional[float]:
     """Mean over the occupants we could read; None when we could read none."""
     return _HS.car_score(pair_scores)

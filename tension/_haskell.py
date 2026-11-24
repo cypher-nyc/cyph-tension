@@ -54,6 +54,9 @@ class HaskellTension:
         self._suitedness = fn("cyph_compute_suitedness", 2)
         self._pair_novelty = fn("cyph_pair_novelty", 1)
         self._pair_tension = fn("cyph_pair_tension", 2)
+        self._work_intelligibility = fn("cyph_work_intelligibility", 2)
+        self._work_novelty = fn("cyph_work_novelty", 1)
+        self._work_tension = fn("cyph_work_tension", 3)
 
         self._pair_intelligibility = lib.cyph_pair_intelligibility
         self._pair_intelligibility.restype = _D
@@ -125,6 +128,15 @@ class HaskellTension:
     def pair_novelty(self, contest_strength: float) -> float:
         # Python's `contest_strength or 0.0`: None and 0 both read as no contest
         return self._pair_novelty(float(contest_strength or 0.0))
+
+    def work_intelligibility(self, cos_to_work: float, depth: float) -> float:
+        return self._work_intelligibility(float(cos_to_work), float(depth))
+
+    def work_novelty(self, contest_strength: float) -> float:
+        return self._work_novelty(float(contest_strength))
+
+    def work_tension(self, cos_to_work: float, depth: float, contest_strength: float) -> float:
+        return self._work_tension(float(cos_to_work), float(depth), float(contest_strength))
 
     def pair_tension(self, intelligibility: float, novelty: float) -> float:
         return self._pair_tension(float(intelligibility), float(novelty))
