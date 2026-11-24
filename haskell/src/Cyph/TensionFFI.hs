@@ -21,6 +21,7 @@
 module Cyph.TensionFFI () where
 
 import Cyph.Tension
+import qualified Cyph.Pair as P
 import Foreign.C.Types (CDouble (..), CInt (..))
 import Foreign.Marshal.Array (peekArray)
 import Foreign.Ptr (Ptr)
@@ -125,6 +126,68 @@ foreign export ccall "cyph_work_intelligibility" ffiWorkIntelligibility :: CDoub
 foreign export ccall "cyph_work_novelty" ffiWorkNovelty :: CDouble -> CDouble
 foreign export ccall "cyph_work_tension" ffiWorkTension :: CDouble -> CDouble -> CDouble -> CDouble
 foreign export ccall "cyph_car_mean" ffiCarMean :: Ptr CDouble -> CInt -> IO CDouble
+
+-- ─── the pair and table score (Cyph.Pair), at the model's defaults ─────
+--
+-- The random-pair sample shared ground is read against is the caller's (one
+-- per embedding model: it chooses which sample to pass), as an array.
+-- Library sizes cross as whole-number doubles. A pair whose library is too
+-- small to say anything comes back as -1; an unusable sample or cosine as
+-- NaN.
+
+pairConfig :: P.Config
+pairConfig = P.defaultConfig "caller"
+
+sampleCals :: Ptr CDouble -> CInt -> IO (Either P.ScoreError P.Calibrations)
+sampleCals ptr n = do
+  xs <- if n <= 0 then pure [] else peekArray (fromIntegral n) ptr
+  pure (P.calibration "caller" (map d xs) >>= \cal -> P.calibrations [cal])
+
+ffiPairScore :: Ptr CDouble -> CInt -> CDouble -> CDouble -> CDouble -> CDouble -> IO CDouble
+ffiPairScore ptr n na nb cosAB s = do
+  cals <- sampleCals ptr n
+  pure $ case cals >>= \cs -> P.scoreReadings pairConfig cs (truncate (d na)) (truncate (d nb)) (d cosAB) 0 (d s) of
+    Right (Just t) -> c (P.unUnit t)
+    Right Nothing -> -1
+    Left _ -> 0 / 0
+
+ffiPairGround :: Ptr CDouble -> CInt -> CDouble -> CDouble -> CDouble -> IO CDouble
+ffiPairGround ptr n na nb cosAB = do
+  xs <- if n <= 0 then pure [] else peekArray (fromIntegral n) ptr
+  pure $ case P.calibration "caller" (map d xs) of
+    Right cal | not (isNaN (d cosAB) || isInfinite (d cosAB)) -> c (P.unUnit (P.groundRead pairConfig cal (truncate (d na)) (truncate (d nb)) (d cosAB)))
+    _ -> 0 / 0
+
+ffiReaderCapacity :: CDouble -> CDouble
+ffiReaderCapacity n = c (P.readerCapacity pairConfig (truncate (d n)))
+
+-- | A table's lower bound, mean − λσ; NaN under two pairs.
+ffiTableLower :: Ptr CDouble -> CInt -> IO CDouble
+ffiTableLower ptr n
+  | n < 2 = pure (0 / 0)
+  | otherwise = do
+      xs <- peekArray (fromIntegral n) ptr
+      pure (maybe (0 / 0) (c . P.unUnit . P.tableLower) (P.scoreTable pairConfig (map (Just . P.clampUnit . d) xs)))
+
+foreign export ccall "cyph_pair_score" ffiPairScore :: Ptr CDouble -> CInt -> CDouble -> CDouble -> CDouble -> CDouble -> IO CDouble
+foreign export ccall "cyph_pair_ground" ffiPairGround :: Ptr CDouble -> CInt -> CDouble -> CDouble -> CDouble -> IO CDouble
+foreign export ccall "cyph_reader_capacity" ffiReaderCapacity :: CDouble -> CDouble
+foreign export ccall "cyph_table_lower" ffiTableLower :: Ptr CDouble -> CInt -> IO CDouble
+
+cTAU, cS0, cN_REF, cLAMBDA_TABLE, cMIN_LIBRARY, cWORK_CAP :: CDouble
+cTAU = c (P.tau pairConfig)
+cS0 = c (P.s0 pairConfig)
+cN_REF = fromIntegral (P.nRef pairConfig)
+cLAMBDA_TABLE = c (P.lambda pairConfig)
+cMIN_LIBRARY = fromIntegral (P.minLibrarySize pairConfig)
+cWORK_CAP = c (P.workCap pairConfig)
+
+foreign export ccall "cyph_const_tau" cTAU :: CDouble
+foreign export ccall "cyph_const_s0" cS0 :: CDouble
+foreign export ccall "cyph_const_n_ref" cN_REF :: CDouble
+foreign export ccall "cyph_const_lambda_table" cLAMBDA_TABLE :: CDouble
+foreign export ccall "cyph_const_min_library" cMIN_LIBRARY :: CDouble
+foreign export ccall "cyph_const_work_cap" cWORK_CAP :: CDouble
 
 -- The tuning surface, for the Python face and the golden test.
 cI_FLOOR, cCOS_LO, cCOS_HI, cW_VEC, cW_GRAPH, cREADING_W, cSTANCE_W :: CDouble

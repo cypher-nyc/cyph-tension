@@ -195,7 +195,7 @@ laws =
   , ( "with no capacity, or κ = 0, absorb changes nothing"
     , 2
     , \[k, i] ->
-        expect (absorbWith (k * 3) i 0 == clamp01 i && absorbWith 0 i 1 == clamp01 i && absorb i 1 == clamp01 i) "absorb moved a score it should leave"
+        expect (absorbWith (k * 3) i 0 == clamp01 i && absorbWith 0 i 1 == clamp01 i && absorb i 0 == clamp01 i && absorb i 1 == absorbWith kappaAbsorb i 1) "absorb moved a score it should leave"
     )
   , ( "shared ground rises with capacity and with κ"
     , 4
@@ -343,7 +343,7 @@ constants =
   , ("0 < I_FLOOR < 1", iFloor > 0 && iFloor < 1)
   , ("a car nobody could read has no score", carMean [] == Nothing)
   , ("a group nobody could read has no floor", groupFloor [[Nothing, Nothing], [Nothing, Nothing]] == Nothing)
-  , ("κ and ρ are off until fitted", kappaAbsorb == 0 && lineDependence == 0)
+  , ("κ is positive (the best distance rises with what one knows); ρ is off until fitted", kappaAbsorb > 0 && lineDependence == 0)
   , ("0 < HOP_REACH < 1, 0 <= HOP_NOVELTY < 1, MAX_HOPS >= 1", hopReach > 0 && hopReach < 1 && hopNovelty >= 0 && hopNovelty < 1 && maxHops >= 1)
   , ("the best distance is not a direct line: two hops outweigh one, and three", hopWeight 2 == 1 && hopWeight 1 < 1 && hopWeight 3 < 1 && hopWeight 4 < hopWeight 3)
   , ("past the hop budget nothing counts", hopWeight (maxHops + 1) == 0 && hopWeight 0 == 0)

@@ -214,10 +214,14 @@ carMean xs = Just (sum' xs / fromIntegral (length xs))
     sum' = foldl (+) 0.0
 
 -- | How strongly accumulated knowledge widens what a person can take in.
--- Zero until it is fitted against outcomes: at zero 'absorb' changes
--- nothing, and the model scores everyone on one curve.
+-- Positive, as Nooteboom's third hypothesis says: the best distance rises
+-- with what one already knows. Set by a rule, not fitted against outcomes:
+-- the largest value at which the most engaged pair's floor stays at or above
+-- half of 'iFloor' (at 1 a pair of full engagement depth is let in from a raw
+-- shared ground of 0.078, and its best distance moves from 0.50 to 0.58).
+-- At zero 'absorb' changes nothing and everyone is scored on one curve.
 kappaAbsorb :: Double
-kappaAbsorb = 0.0
+kappaAbsorb = 1.0
 
 -- | Shared ground as a person of capacity @c@ experiences it (Nooteboom's
 -- third hypothesis): @1 − (1 − I)^(1 + κ·c)@. It never lowers shared

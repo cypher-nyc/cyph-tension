@@ -148,7 +148,7 @@ def main(argv=None) -> int:
         sub.add_argument("--examples", action="store_true", help="the libraries in examples/")
         sub.add_argument("--topic")
         sub.add_argument("--json", action="store_true")
-        sub.add_argument("--kappa", type=float, help="absorptive capacity (default: the model's, 0)")
+        sub.add_argument("--kappa", type=float, help="absorptive capacity (default: the model's)")
         sub.add_argument("--rho", type=float, help="dependence of lines against one work (default: the model's, 0)")
         _add_vector_flags(sub)
 

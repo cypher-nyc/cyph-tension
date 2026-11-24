@@ -77,3 +77,43 @@ class WorkTensionTests(unittest.TestCase):
 
     def test_more_engagement_never_lowers_it(self):
         self.assertGreaterEqual(tension.work_tension(0.6, 0.8, 1.0), tension.work_tension(0.6, 0.2, 1.0))
+
+
+class PairScore(unittest.TestCase):
+    """The hardened pair score (Cyph.Pair), through the library."""
+
+    SAMPLE = [i / 100 for i in range(10, 91)]
+
+    def test_the_middle_ground_scores(self):
+        # the middle ground's readings (I = 0.50, s = 1.86), here with five items each
+        t = tension.pair_score(self.SAMPLE, 5, 5, 0.50, 1.8575)
+        self.assertIsNotNone(t)
+        self.assertGreater(t, 0.0)
+
+    def test_a_small_library_is_not_scored(self):
+        self.assertIsNone(tension.pair_score(self.SAMPLE, tension.MIN_LIBRARY - 1, 400, 0.5, 1.0))
+
+    def test_symmetric_and_bounded(self):
+        for na, nb, cos, s in [(5, 400, 0.3, 0.5), (12, 40, 0.7, 2.0), (500, 500, 0.12, 3.0)]:
+            ab = tension.pair_score(self.SAMPLE, na, nb, cos, s)
+            ba = tension.pair_score(self.SAMPLE, nb, na, cos, s)
+            self.assertEqual(ab, ba)
+            self.assertTrue(0.0 <= ab <= 1.0)
+
+    def test_engagement_depth_lifts_ground(self):
+        light = tension.pair_ground(self.SAMPLE, 5, 5, 0.4)
+        deep = tension.pair_ground(self.SAMPLE, 500, 500, 0.4)
+        self.assertGreater(deep, light)
+        self.assertEqual(tension.reader_capacity(tension.N_REF), 1.0)
+
+    def test_an_unusable_sample_is_an_error(self):
+        with self.assertRaises(ValueError):
+            tension.pair_score([0.4, 0.4], 10, 10, 0.4, 1.0)
+
+    def test_table_mean_and_lower_bound(self):
+        mean, lower = tension.table_score([0.2, None, 0.6])
+        self.assertAlmostEqual(mean, 0.4)
+        self.assertAlmostEqual(lower, 0.2)
+        self.assertEqual(tension.table_score([0.3]), (0.3, None))
+        self.assertEqual(tension.table_score([]), (None, None))
+

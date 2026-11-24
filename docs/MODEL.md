@@ -105,6 +105,66 @@ tension = gate(I) · I · N
 - A group's score is the mean of the pairs that could be read; its floor
   is the least well-met person's best pair.
 
+### The pair score, hardened (`Cyph.Pair`)
+
+The same two opposing terms, with shared ground read against a measured
+distribution, a smooth gate, and each cypher's library counted.
+
+```
+n       = works explored, saved, annotated + cyphs attended, online and in person
+c       = min(c_a, c_b),   c_x = min(1, log(1 + n_x) / log(1 + n_ref))
+I       = percentile of cos(a, b) among random pairs, per embedding model
+I'      = 1 − (1 − I)^(1 + κ·c)
+g       = σ((I' − θ) / τ)
+w(h)    = reach^(h − 1) · (1 − novelty^h), scaled so its peak is 1; 0 past H hops
+s       = Σ over contest paths p of strength_p · w(h_p)
+N       = 1 − e^(−s / s₀)
+tension = g · I' · N
+table   = mean of its pairs, and mean − λ·σ
+```
+
+- A library is what a person explored, saved and annotated, and the cyphs
+  they attended. A cyph held in person is a cyph in its own right and counts
+  exactly as one held online: one toward `n`, and its topic and works in the
+  vector shared ground is read from.
+- A cypher with fewer than `MIN_LIBRARY` items is not scored.
+- A contest path is a path through the graph with an odd number of edges on
+  the dissonance axis (contests, complicates, refutes, opposes). An even
+  number is agreement and adds nothing to `s`. Walks stop at `H` hops.
+- `c` (engagement depth) is how deep the lighter cypher goes, with diminishing
+  returns, capped at 1. With `κ > 0`, deeply engaged pairs find footing with less
+  overlap (Nooteboom's third hypothesis: the best distance rises with what
+  one already knows).
+
+| Constant | Value | How it was set |
+|---|---|---|
+| `θ` (`I_FLOOR`) | 0.15 | Bail et al.; not fitted |
+| `τ` | 0.02 | the gate's width; a starting point |
+| `κ` (`KAPPA_ABSORB`) | 1.0 | a rule, not a fit: the largest value at which the most engaged pair's floor stays at or above half of `θ` |
+| `s₀` | 1.0 | a starting point |
+| `n_ref` | 500 | a starting point; to be set from measured library sizes |
+| `λ` | 1.0 | a starting point |
+| `H`, reach, novelty | 4, 0.7, 0.6 | starting points; the weight peaks at two hops |
+| `MIN_LIBRARY` | 5 | a starting point |
+
+How κ was chosen. With no recorded outcomes to fit against, six values were
+run through the model on the illustrative curve (`I = 1 − d`, `N = d`) and
+on 4,000 generated pairs:
+
+| κ | best distance, c = 1 | most ground added | raw floor, c = 1 | top tenth unchanged |
+|---|---|---|---|---|
+| 0 | 0.50 | 0 | 0.150 | 100% |
+| 0.5 | 0.54 | 0.15 | 0.103 | 93% |
+| 1 | 0.58 | 0.25 | 0.078 | 88% |
+| 1.5 | 0.61 | 0.33 | 0.063 | 84% |
+| 2 | 0.63 | 0.39 | 0.053 | 82% |
+| 3 | 0.67 | 0.47 | 0.040 | 77% |
+
+At 1 the best distance moves outward for deeply engaged pairs while the floor
+that guards against backfire still shuts out the bottom 7.8% of pairs. Past
+it, engagement depth alone lets pairs under half the floor. `playground
+calibrate` replaces this with a fit once 200 seated pairs have outcomes.
+
 ## The constants
 
 These are the tuning surface. The shape of the curve is held by the property
@@ -119,5 +179,5 @@ tests, so changing a constant cannot quietly deform it.
 | `LAMBDA_TRAJECTORY` | 0.35 | modest on purpose: trajectory modulates a score and never creates one |
 | `T_MAX` | 0.15 | cosine movement toward a topic at which the bonus saturates |
 | `W_PEOPLE`, `W_TOPIC` | 0.5, 0.5 | ground from the two people against ground from the topic |
-| `KAPPA_ABSORB` | 0 | how far capacity widens shared ground; zero until fitted |
+| `KAPPA_ABSORB` | 1.0 | how far engagement depth widens shared ground; set by a rule (see the pair score), not fitted |
 | `LINE_DEPENDENCE` | 0 | how far lines against one work are one disagreement; zero until fitted |

@@ -78,6 +78,22 @@ class HaskellTension:
         self._car_mean.restype = _D
         self._car_mean.argtypes = [ctypes.POINTER(_D), ctypes.c_int]
 
+        # the pair and table score (Cyph.Pair): a random-pair sample in, a score out
+        self._pair_score = lib.cyph_pair_score
+        self._pair_score.restype = _D
+        self._pair_score.argtypes = [ctypes.POINTER(_D), ctypes.c_int, _D, _D, _D, _D]
+        self._pair_ground = lib.cyph_pair_ground
+        self._pair_ground.restype = _D
+        self._pair_ground.argtypes = [ctypes.POINTER(_D), ctypes.c_int, _D, _D, _D]
+        self._reader_capacity = fn("cyph_reader_capacity", 1)
+        self._table_lower = lib.cyph_table_lower
+        self._table_lower.restype = _D
+        self._table_lower.argtypes = [ctypes.POINTER(_D), ctypes.c_int]
+        self.pair_constants = {
+            name: fn(f"cyph_const_{name.lower()}", 0)()
+            for name in ("TAU", "S0", "N_REF", "LAMBDA_TABLE", "MIN_LIBRARY", "WORK_CAP")
+        }
+
         self.constants = {
             name: fn(f"cyph_const_{name.lower()}", 0)()
             for name in (
@@ -193,6 +209,42 @@ class HaskellTension:
             return None
         # rounded here, as car_score always has (Python's round, half-even)
         return round(mean, 4)
+
+    # ─── the pair and table score (Cyph.Pair) ────────────────────────
+    # library sizes cross as whole-number doubles; a library too small to
+    # say anything comes back as -1 (None here), an unusable sample as NaN
+
+    def pair_score(
+        self, sample: Iterable[float], n_a: int, n_b: int, cosine: float, contest: float
+    ) -> Optional[float]:
+        values = [float(x) for x in sample]
+        arr = (_D * len(values))(*values)
+        t = self._pair_score(arr, len(values), float(int(n_a)), float(int(n_b)), float(cosine), float(contest or 0.0))
+        if math.isnan(t):
+            raise ValueError("pair_score: the random-pair sample or the cosine is unusable")
+        return None if t < 0 else t
+
+    def pair_ground(self, sample: Iterable[float], n_a: int, n_b: int, cosine: float) -> float:
+        values = [float(x) for x in sample]
+        arr = (_D * len(values))(*values)
+        g = self._pair_ground(arr, len(values), float(int(n_a)), float(int(n_b)), float(cosine))
+        if math.isnan(g):
+            raise ValueError("pair_ground: the random-pair sample or the cosine is unusable")
+        return g
+
+    def reader_capacity(self, n: int) -> float:
+        return self._reader_capacity(float(int(n)))
+
+    def table_score(self, pair_scores: Iterable[Optional[float]]):
+        """`(mean, lower)` over the pairs that could be read; `lower` is
+        mean − λσ, None under two pairs; both None with no pair at all."""
+        usable = [float(p) for p in pair_scores if p is not None]
+        if not usable:
+            return None, None
+        arr = (_D * len(usable))(*usable)
+        mean = self._car_mean(arr, len(usable))
+        lower = self._table_lower(arr, len(usable))
+        return mean, (None if math.isnan(lower) else lower)
 
 
 _loaded: Optional[HaskellTension] = None

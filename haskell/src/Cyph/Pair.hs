@@ -4,6 +4,8 @@
 
 -- | The pair and table score, hardened.
 --
+-- > n_x     = the works in reader x's library + the cyphs they attended,
+-- >           online and in person alike
 -- > c       = min c_a c_b,        c_x = min 1 (log (1 + n_x) / log (1 + nRef))
 -- > I       = percentile of cos(a, b) among random pairs, for the embedding model
 -- > I'      = 1 − (1 − I)^(1 + κ·c)
@@ -52,8 +54,13 @@ module Cyph.Pair
   , percentile
     -- * Libraries and the lines between their works
   , WorkId
+  , CyphId
+  , Attended (..)
   , Library
   , library
+  , attendedLibrary
+  , libraryWorks
+  , libraryCyphs
   , librarySize
   , LinkType (..)
   , Link (..)
@@ -76,6 +83,8 @@ module Cyph.Pair
   , tensionFrom
     -- * Scores
   , ScoreError (..)
+  , scoreReadings
+  , groundRead
   , scorePaths
   , scorePair
   , TableScore (..)
@@ -117,6 +126,7 @@ data TypeWeights = TypeWeights
   { wContests :: Double
   , wComplicates :: Double
   , wRefutes :: Double
+  , wOpposes :: Double
   }
   deriving (Eq, Show)
 
@@ -155,7 +165,8 @@ data Config = Config
   deriving (Eq, Show)
 
 -- | The model's defaults for an embedding model. κ and @floorI@ are the
--- values "Cyph.Tension" already holds ('kappaAbsorb', 'iFloor'); @s0 = 1@
+-- values "Cyph.Tension" holds ('kappaAbsorb', set by a rule there, and
+-- 'iFloor'); @s0 = 1@
 -- keeps @N = 1 − e^(−s)@. The rest (@nRef@, @lambda@, @minLibrarySize@,
 -- @workCap@, equal type weights) are starting points, not fitted; so are
 -- the hop terms, which are "Cyph.Tension"'s ('hopReach', 'hopNovelty',
@@ -173,7 +184,7 @@ defaultConfig modelId =
     , normalizePeak = False
     , minLibrarySize = 5
     , embeddingModelId = modelId
-    , typeWeights = TypeWeights 1.0 1.0 1.0
+    , typeWeights = TypeWeights 1.0 1.0 1.0 1.0
     , workCap = 1.0
     , reach = hopReach
     , noveltyRate = hopNovelty
@@ -192,7 +203,7 @@ validateConfig cfg
   | not (finite (lambda cfg) && lambda cfg >= 0) = bad "lambda must be finite and >= 0"
   | minLibrarySize cfg < 0 = bad "minLibrarySize must be >= 0"
   | not (finite (workCap cfg) && workCap cfg > 0) = bad "workCap must be finite and > 0"
-  | not (all (\w -> finite w && w >= 0) [wContests tw, wComplicates tw, wRefutes tw]) =
+  | not (all (\w -> finite w && w >= 0) [wContests tw, wComplicates tw, wRefutes tw, wOpposes tw]) =
       bad "type weights must be finite and >= 0"
   | not (reach cfg >= 0 && reach cfg <= 1) = bad "reach must be in [0, 1]"
   | not (noveltyRate cfg >= 0 && noveltyRate cfg < 1) = bad "noveltyRate must be in [0, 1)"
@@ -262,17 +273,53 @@ percentile (Calibration _ xs) x = clampUnit (go 0 xs)
 
 type WorkId = String
 
--- | The distinct works a reader has.
-newtype Library = Library [WorkId]
+type CyphId = String
+
+-- | A cyph a reader attended: online, or in person (a cyph in its own
+-- right, held in a room), and the works it was about.
+data Attended = Attended
+  { attendedCyph :: CyphId
+  , attendedInPerson :: Bool
+  , attendedWorks :: [WorkId]
+  }
+  deriving (Eq, Ord, Show)
+
+-- | What a reader has: the distinct works they explored, saved or
+-- annotated, and the distinct cyphs they attended. Both count toward how
+-- much they have to draw on ('librarySize'); the works, and the works their
+-- cyphs were about, are where the paths between two readers end.
+data Library = Library
+  { libraryWorks :: [WorkId]
+  , libraryCyphs :: [(Bool, CyphId)]
+  -- ^ in person or online, and which cyph
+  , libraryEnds :: [WorkId]
+  -- ^ the works, and the works the cyphs were about
+  }
   deriving (Eq, Show)
 
+distinct :: Ord a => [a] -> [a]
+distinct xs = [x | (x : _) <- group (sort xs)]
+
+-- | A library of works alone.
 library :: [WorkId] -> Library
-library ws = Library [w | (w : _) <- group (sort ws)]
+library ws = attendedLibrary ws []
 
+-- | A library of works and the cyphs attended. Attending a cyph never
+-- lowers 'librarySize': a cyph adds one, once, however many times it is
+-- given, and one held in person counts exactly as one held online.
+attendedLibrary :: [WorkId] -> [Attended] -> Library
+attendedLibrary ws cs =
+  Library
+    { libraryWorks = distinct ws
+    , libraryCyphs = distinct [(attendedInPerson c, attendedCyph c) | c <- cs]
+    , libraryEnds = distinct (ws ++ concatMap attendedWorks cs)
+    }
+
+-- | @n@: the works plus the cyphs attended.
 librarySize :: Library -> Int
-librarySize (Library ws) = length ws
+librarySize l = length (libraryWorks l) + length (libraryCyphs l)
 
-data LinkType = Contests | Complicates | Refutes
+data LinkType = Contests | Complicates | Refutes | Opposes
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 -- | A line from one work to another (@linkFrom@ stands against @linkTo@),
@@ -363,6 +410,7 @@ pathContestStrength cfg p =
       Contests -> wContests (typeWeights cfg)
       Complicates -> wComplicates (typeWeights cfg)
       Refutes -> wRefutes (typeWeights cfg)
+      Opposes -> wOpposes (typeWeights cfg)
 
 -- | What one path adds to the kinship between two readers: 0 unless an
 -- even number of its edges (none included) are dissonant; else its
@@ -381,11 +429,11 @@ pathKinStrength cfg p
 -- at any one work add at most @workCap@. Summed in a fixed order, so it
 -- is exactly symmetric in the two libraries.
 evidence :: (Path -> Double) -> Config -> Library -> Library -> [Path] -> Double
-evidence worth cfg (Library as) (Library bs) paths =
+evidence worth cfg la lb paths =
   foldl' (+) 0 (map capped (groupOn (pathTo . fst) deduped))
   where
-    inA w = w `elem` as
-    inB w = w `elem` bs
+    inA w = w `elem` libraryEnds la
+    inB w = w `elem` libraryEnds lb
     across p =
       pathFrom p /= pathTo p
         && not (null (pathHops p))
@@ -462,19 +510,33 @@ data ScoreError
 -- config or calibration that cannot be used (whatever the readers);
 -- @Right Nothing@ when either library is smaller than @minLibrarySize@.
 scorePaths :: Config -> Calibrations -> Library -> Library -> Double -> [Path] -> Either ScoreError (Maybe UnitInterval)
-scorePaths cfg0 cals a b cosAB paths = do
+scorePaths cfg cals a b cosAB paths =
+  scoreReadings cfg cals (librarySize a) (librarySize b) cosAB (kinStrength cfg a b paths) (contestStrength cfg a b paths)
+
+-- | The same score from its readings: the two library sizes, the raw cosine
+-- between the libraries, and the kinship and contest strengths a traversal
+-- summed ('kinStrength', 'contestStrength'). What a service that walks the
+-- graph itself calls; 'scorePaths' is this over a snapshot of paths.
+scoreReadings :: Config -> Calibrations -> Int -> Int -> Double -> Double -> Double -> Either ScoreError (Maybe UnitInterval)
+scoreReadings cfg0 cals na nb cosAB kin s = do
   cfg <- validateConfig cfg0
   cal <- calibrationFor cfg cals
   if not (finite cosAB)
     then Left (UnreadableCosine cosAB)
     else
-      if librarySize a < minLibrarySize cfg || librarySize b < minLibrarySize cfg
+      if na < minLibrarySize cfg || nb < minLibrarySize cfg
         then Right Nothing
         else
-          let c = pairCapacity cfg (librarySize a) (librarySize b)
-              i = ground cfg (percentile cal cosAB) (kinStrength cfg a b paths)
-              n = divergence cfg (contestStrength cfg a b paths)
+          let c = pairCapacity cfg na nb
+              i = ground cfg (percentile cal cosAB) kin
+              n = divergence cfg s
            in Right (Just (tensionFrom cfg c i n))
+
+-- | Shared ground as the pair reads it, @I'@: the percentile of the cosine,
+-- lifted by the lesser reader's engagement depth. What a caller compares
+-- with the floor to say why a pair scored nothing.
+groundRead :: Config -> Calibration -> Int -> Int -> Double -> UnitInterval
+groundRead cfg cal na nb cosAB = absorbed cfg (pairCapacity cfg na nb) (percentile cal cosAB)
 
 -- | 'scorePaths' over direct lines alone.
 scorePair :: Config -> Calibrations -> Library -> Library -> Double -> [Link] -> Either ScoreError (Maybe UnitInterval)

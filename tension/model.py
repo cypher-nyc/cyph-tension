@@ -235,9 +235,10 @@ def car_score(pair_scores: Iterable[Optional[float]]) -> Optional[float]:
 # ─────────────────────────────────────────────────────────────────────
 
 # How strongly accumulated knowledge widens what a person can take in.
-# Zero until it is fitted against outcomes: at zero `absorb` changes
-# nothing, and the model scores everyone on one curve.
-KAPPA_ABSORB = 0.0
+# Positive (the best distance rises with what one already knows); set by a
+# rule in the Haskell (`kappaAbsorb`), not fitted against outcomes. At zero
+# `absorb` changes nothing, and the model scores everyone on one curve.
+KAPPA_ABSORB = 1.0
 
 
 def absorb_with(kappa: float, intelligibility: float, capacity: float) -> float:
@@ -348,3 +349,47 @@ def group_floor(matrix: Iterable[Iterable[Optional[float]]]) -> Optional[float]:
     no readable pair are left out; a group with none has no floor.
     """
     return _HS.group_floor(matrix)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# The pair and table score, hardened (Cyph.Pair; docs/MODEL.md)
+# ─────────────────────────────────────────────────────────────────────
+
+# The gate's width, the divergence scale, the library size at which
+# engagement depth is full, the table penalty, the smallest library scored,
+# and the most the paths against one work add to s. Read from the library.
+TAU = _HS.pair_constants["TAU"]
+S0 = _HS.pair_constants["S0"]
+N_REF = int(_HS.pair_constants["N_REF"])
+LAMBDA_TABLE = _HS.pair_constants["LAMBDA_TABLE"]
+MIN_LIBRARY = int(_HS.pair_constants["MIN_LIBRARY"])
+WORK_CAP = _HS.pair_constants["WORK_CAP"]
+
+
+def pair_score(sample: Iterable[float], n_a: int, n_b: int, cosine: float, contest: float) -> Optional[float]:
+    """Productive tension between two cyphers, ``g · I' · N``: ``n_a``, ``n_b``
+    their library sizes (works explored, saved, annotated + cyphs attended,
+    online and in person), ``cosine`` the raw cosine between their library
+    vectors, read as a percentile of ``sample`` (cosines of random pairs, for
+    the same embedding model), and ``contest`` the summed strength of the
+    contest paths between their works. None when either library is under
+    ``MIN_LIBRARY``; ValueError when the sample or the cosine is unusable."""
+    return _HS.pair_score(sample, n_a, n_b, cosine, contest)
+
+
+def pair_ground(sample: Iterable[float], n_a: int, n_b: int, cosine: float) -> float:
+    """Shared ground as the pair reads it, ``I'``: the percentile lifted by
+    the lighter cypher's engagement depth."""
+    return _HS.pair_ground(sample, n_a, n_b, cosine)
+
+
+def reader_capacity(n: int) -> float:
+    """Engagement depth of a library of ``n`` items: ``min(1, log(1+n) / log(1+N_REF))``."""
+    return _HS.reader_capacity(n)
+
+
+def table_score(pair_scores: Iterable[Optional[float]]):
+    """A table (the people in one cyph): ``(mean, mean − λσ)`` over the pairs
+    that could be read; the lower bound is None under two pairs."""
+    return _HS.table_score(pair_scores)
+

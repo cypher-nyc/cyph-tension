@@ -109,13 +109,13 @@ genConfig = do
   l <- double 0 3
   np <- bool
   m <- int 0 6
-  ws <- mapM (const (double 0 2)) [1 :: Int, 2, 3]
+  ws <- mapM (const (double 0 2)) [1 :: Int, 2, 3, 4]
   cap <- double 0.2 3
   rch <- double 0 1
   nov <- double 0 0.95
   budget <- int 1 6
   gg <- elements [0, 0, 0.3, 0.5, 1]
-  let [wc, wm, wr] = ws
+  let [wc, wm, wr, wo] = ws
   pure
     (defaultConfig modelId)
       { kappa = k
@@ -125,7 +125,7 @@ genConfig = do
       , lambda = l
       , normalizePeak = np
       , minLibrarySize = m
-      , typeWeights = TypeWeights wc wm wr
+      , typeWeights = TypeWeights wc wm wr wo
       , workCap = cap
       , reach = rch
       , noveltyRate = nov
@@ -136,8 +136,14 @@ genConfig = do
 universe :: [WorkId]
 universe = ["w" ++ show i | i <- [0 :: Int .. 14]]
 
+cyphs :: [CyphId]
+cyphs = ["c" ++ show i | i <- [0 :: Int .. 7]]
+
+genAttended :: Gen Attended
+genAttended = Attended <$> elements cyphs <*> bool <*> listOf 0 3 (elements universe)
+
 genLibrary :: Gen Library
-genLibrary = library <$> listOf 0 12 (elements universe)
+genLibrary = attendedLibrary <$> listOf 0 12 (elements universe) <*> listOf 0 6 genAttended
 
 genLink :: Gen Link
 genLink = Link <$> elements universe <*> elements universe <*> elements [minBound .. maxBound] <*> double (-0.2) 1.2
@@ -228,6 +234,51 @@ laws =
           let ab = score cals (PairCase cfg a b c ls)
               ba = score cals (PairCase cfg b a c ls)
            in expect (ab == ba) (show ab ++ " /= " ++ show ba)
+      )
+  , forAll
+      "scoring from readings is scoring from paths: the same snapshot, the same score"
+      3000
+      pathGen
+      ( \(PathCase cfg a b c ps, Shown cals) ->
+          let viaPaths = scorePaths cfg cals a b c ps
+              viaReadings = scoreReadings cfg cals (librarySize a) (librarySize b) c (kinStrength cfg a b ps) (contestStrength cfg a b ps)
+           in expect (viaPaths == viaReadings) (show viaPaths ++ " /= " ++ show viaReadings)
+      )
+  , forAll
+      "engagement depth c never falls as n grows, and is capped at 1"
+      5000
+      ((,,) <$> genConfig <*> int 0 5000 <*> int 0 5000)
+      ( \(cfg, n, more) ->
+          let lo = readerCapacity cfg n
+              hi = readerCapacity cfg (n + more)
+              far = readerCapacity cfg (nRef cfg + more)
+           in expect (lo >= 0 && lo <= hi && hi <= 1 && far == 1) (show (lo, hi, far))
+      )
+  , forAll
+      "attending a cyph never lowers n; one held in person counts as one held online; the same cyph counts once"
+      5000
+      ((,,) <$> listOf 0 12 (elements universe) <*> listOf 0 6 genAttended <*> genAttended)
+      ( \(ws, cs, c) ->
+          let before = librarySize (attendedLibrary ws cs)
+              after = librarySize (attendedLibrary ws (c : cs))
+              twice = librarySize (attendedLibrary ws (c : c : cs))
+              fresh = Attended "new" (attendedInPerson c) []
+              flipped = fresh {attendedInPerson = not (attendedInPerson c)}
+              one x = librarySize (attendedLibrary ws (x : cs)) - before
+           in expect
+                (after >= before && after <= before + 1 && twice == after && one fresh == 1 && one flipped == 1)
+                (show (before, after, twice))
+      )
+  , forAll
+      "the same inputs give the same score, in whatever order the works, cyphs and paths arrive"
+      3000
+      ((,,,) <$> pathGen <*> listOf 0 12 (elements universe) <*> listOf 0 6 genAttended <*> listOf 0 6 genAttended)
+      ( \((PathCase cfg _ _ c ps, Shown cals), ws, ca, cb) ->
+          let a = attendedLibrary ws ca
+              b = attendedLibrary (reverse ws) cb
+              once = scorePaths cfg cals a b c ps
+              again = scorePaths cfg cals (attendedLibrary (reverse ws) (reverse ca)) (attendedLibrary ws (reverse cb)) c (reverse ps)
+           in expect (once == again) (show once ++ " /= " ++ show again)
       )
   , forAll
       "κ·c = 0 leaves shared ground as it is (I' == I)"
@@ -461,6 +512,96 @@ figureTsv =
     cfg = defaultConfig modelId
     fmt x = showFFloat (Just 6) x ""
 
+-- | Everything the two matching figures draw, computed here and written as
+-- plain tables: nothing in a figure is typed in by hand.
+figureFiles :: [(FilePath, String)]
+figureFiles =
+  [ ("research-matching-curve.tsv", figureTsv)
+  , ("research-matching-values.tex", unlines [macro k v | (k, v) <- values])
+  , ("research-matching-depthcurve.tsv", table ["n", "c"] [[fromIntegral n, readerCapacity cfg n] | n <- [0 .. 40 :: Int] ++ [45, 50 .. 700]])
+  , ("research-matching-absorb.tsv", table ["i", "c0", "c05", "c1"] [[i, ab 0 i, ab 0.5 i, ab 1 i] | i <- steps 100])
+  , ("research-matching-divergence.tsv", table ["s", "n"] [[x, unUnit (divergence cfg x)] | x <- map (* 5) (steps 100)])
+  , ("research-matching-gate.tsv", table ["i", "g"] [[i, gate cfg (clampUnit i)] | i <- map (* 0.4) (steps 200)])
+  , ("research-matching-heat.tex", heat)
+  ]
+  where
+    cfg = defaultConfig modelId
+    steps :: Int -> [Double]
+    steps k = [fromIntegral j / fromIntegral k | j <- [0 .. k]]
+    ab c i = unUnit (absorbed cfg c (clampUnit i))
+    fmt k x = showFFloat (Just k) x ""
+    table hdr rows = unlines (tabs hdr : [tabs (map (fmt 6) r) | r <- rows])
+    tabs = foldr1 (\a b -> a ++ "\t" ++ b)
+    -- T = g(I') · I' · N over the plane, one square per cell, as dark as
+    -- the score (the page paints a figure through its opacity, not its colour)
+    cells = 20 :: Int
+    heat =
+      unlines
+        [ "\\fill[opacity=" ++ fmt 3 t ++ "] (" ++ fmt 3 x ++ "," ++ fmt 3 y ++ ") rectangle ++(" ++ fmt 3 w ++ "," ++ fmt 3 w ++ ");"
+        | a <- [0 .. cells - 1]
+        , b <- [0 .. cells - 1]
+        , let w = 1 / fromIntegral cells
+              x = fromIntegral a * w
+              y = fromIntegral b * w
+              ip = x + w / 2
+              n = y + w / 2
+              t = gate cfg (clampUnit ip) * ip * n
+        , t >= 0.005
+        ]
+    macro k v = "\\newcommand{\\" ++ k ++ "}{" ++ v ++ "}"
+    -- the three pairs the paths figure draws: shared ground, and the hops of each contest path drawn
+    -- (every edge drawn fully sure, so each path adds its w(h); past the budget adds 0)
+    scenarios =
+      [ ("A", 0.90, (120, 60), [])
+      , ("B", 0.40, (200, 25), [2, 3])
+      , ("C", 0.05, (300, 8), [1, 3, 5, 6])
+      ] :: [(String, Double, (Int, Int), [Int])]
+    sS hops = sum [pathContestStrength cfg (reached h) | h <- hops]
+    sN x = unUnit (divergence cfg x)
+    sC (na, nb) = pairCapacity cfg na nb
+    sIp i ns = unUnit (absorbed cfg (sC ns) (clampUnit i))
+    sT i ns x = unUnit (tensionFrom cfg (sC ns) (clampUnit i) (divergence cfg x))
+    values =
+      [ ("mKappa", fmt 1 (kappa cfg))
+      , ("mTheta", fmt 2 (floorI cfg))
+      , ("mTau", fmt 2 (tau cfg))
+      , ("mSzero", fmt 1 (s0 cfg))
+      , ("mNref", show (nRef cfg))
+      , ("mLambda", fmt 1 (lambda cfg))
+      , ("mHops", show (hopBudget cfg))
+      , ("mReach", fmt 1 (reach cfg))
+      , ("mNovelty", fmt 1 (noveltyRate cfg))
+      , ("mMinLibrary", show (minLibrarySize cfg))
+      , ("mWorkCap", fmt 1 (workCap cfg))
+      ]
+        ++ [("mW" ++ name, fmt 2 (pathContestStrength cfg (reached h))) | (name, h) <- zip ["One", "Two", "Three", "Four", "Five", "Six"] [1 ..]]
+        ++ [("mDepth" ++ name, fmt 2 (readerCapacity cfg n)) | (name, n) <- zip ["One", "Ten", "Hundred", "Ref"] [1, 10, 100, nRef cfg]]
+        ++ concat
+          [ [ ("s" ++ k ++ "I", fmt 2 i)
+            , ("s" ++ k ++ "Gap", fmt 2 (1 - i))
+            , ("s" ++ k ++ "Na", show (fst ns))
+            , ("s" ++ k ++ "Nb", show (snd ns))
+            , ("s" ++ k ++ "C", fmt 2 (sC ns))
+            , ("s" ++ k ++ "Exp", fmt 2 (1 + kappa cfg * sC ns))
+            , ("s" ++ k ++ "Ip", fmt 2 (sIp i ns))
+            , ("s" ++ k ++ "S", fmt 2 (sS hops))
+            , ("s" ++ k ++ "N", fmt 2 (sN (sS hops)))
+            , ("s" ++ k ++ "G", fmt 2 (gate cfg (clampUnit (sIp i ns))))
+            , ("s" ++ k ++ "T", fmt 2 (sT i ns (sS hops)))
+            ]
+          | (k, i, ns, hops) <- scenarios
+          ]
+        -- divergence, read aloud: one fully sure contest path at its best distance, and three
+        ++ [ ("dOneS", fmt 2 (pathContestStrength cfg (reached 2)))
+           , ("dOneN", fmt 2 (unUnit (divergence cfg (pathContestStrength cfg (reached 2)))))
+           , ("dThreeS", fmt 2 (3 * pathContestStrength cfg (reached 2)))
+           , ("dThreeN", fmt 2 (unUnit (divergence cfg (3 * pathContestStrength cfg (reached 2)))))
+           ]
+        ++ [ ("mAbsorbFrom", fmt 2 0.40)
+           , ("mAbsorbGap", fmt 2 (1 - 0.40))
+           , ("mAbsorbTo", fmt 2 (ab 1 0.40))
+           ]
+
 goldenPath :: FilePath
 goldenPath = "test/golden/figure13.tsv"
 
@@ -487,6 +628,7 @@ main = do
   args <- getArgs
   case args of
     ["--figure13"] -> putStr figureTsv
+    ["--figures", dir] -> mapM_ (\(name, body) -> writeFile (dir ++ "/" ++ name) body) figureFiles
     _ -> do
       putStrLn "Cyph.Pair properties"
       rs <- mapM (\(k, l) -> l (2000 + k)) (zip [0 ..] laws)

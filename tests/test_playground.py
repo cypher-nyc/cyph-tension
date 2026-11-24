@@ -119,7 +119,9 @@ class Ranking(unittest.TestCase):
     def test_capacity_widens_ground_only_when_kappa_is_set(self):
         plain = {r["name"]: r for r in rank.rank(self.people, "ada", self.relations)["ranked"]}
         wide = {r["name"]: r for r in rank.rank(self.people, "ada", self.relations, kappa=3.0)["ranked"]}
-        self.assertEqual(plain["ben"]["intelligibility"], rank.rank(self.people, "ada", self.relations, kappa=0.0)["ranked"][1]["intelligibility"])
+        flat = {r["name"]: r for r in rank.rank(self.people, "ada", self.relations, kappa=0.0)["ranked"]}
+        # the model's own κ is positive: left alone, capacity already widens ground
+        self.assertGreater(plain["ben"]["intelligibility"], flat["ben"]["intelligibility"])
         self.assertGreater(wide["ben"]["intelligibility"], plain["ben"]["intelligibility"])
         self.assertEqual(wide["eze"]["intelligibility"], 0.0)   # capacity cannot make ground out of none
         self.assertAlmostEqual(rank.capacity(self.people["ada"]), 1 - 2.718281828459045 ** (-6 / 50), places=9)
